@@ -1,0 +1,4286 @@
+diff -ENwbur src/asm.cpp src/asm.cpp
+--- src/asm.cpp	2018-06-20 11:40:06.185109800 +0500
++++ src/asm.cpp	2018-06-20 10:36:41.366296200 +0500
+@@ -44,8 +44,10 @@
+ 	if (!strlen(astr)) {
+ 		//Implied instructions
+ 			 if (!strcmp(ins,"BRK")) output[0] = 0x00;
++		else if (!strcmp(ins,"TAZ")) output[0] = 0x02;
+ 		else if (!strcmp(ins,"PHP")) output[0] = 0x08;
+ 		else if (!strcmp(ins,"ASL")) output[0] = 0x0A;
++		else if (!strcmp(ins,"TZA")) output[0] = 0x12;
+ 		else if (!strcmp(ins,"CLC")) output[0] = 0x18;
+ 		else if (!strcmp(ins,"PLP")) output[0] = 0x28;
+ 		else if (!strcmp(ins,"ROL")) output[0] = 0x2A;
+@@ -58,6 +60,8 @@
+ 		else if (!strcmp(ins,"PLA")) output[0] = 0x68;
+ 		else if (!strcmp(ins,"ROR")) output[0] = 0x6A;
+ 		else if (!strcmp(ins,"SEI")) output[0] = 0x78;
++		else if (!strcmp(ins,"PLZ")) output[0] = 0x7A;
++		else if (!strcmp(ins,"PHZ")) output[0] = 0x80;
+ 		else if (!strcmp(ins,"DEY")) output[0] = 0x88;
+ 		else if (!strcmp(ins,"TXA")) output[0] = 0x8A;
+ 		else if (!strcmp(ins,"TYA")) output[0] = 0x98;
+@@ -68,6 +72,8 @@
+ 		else if (!strcmp(ins,"TSX")) output[0] = 0xBA;
+ 		else if (!strcmp(ins,"INY")) output[0] = 0xC8;
+ 		else if (!strcmp(ins,"DEX")) output[0] = 0xCA;
++		else if (!strcmp(ins,"INZ")) output[0] = 0xFA;
++		else if (!strcmp(ins,"DEZ")) output[0] = 0xFB;
+ 		else if (!strcmp(ins,"CLD")) output[0] = 0xD8;
+ 		else if (!strcmp(ins,"INX")) output[0] = 0xE8;
+ 		else if (!strcmp(ins,"NOP")) output[0] = 0xEA;
+@@ -98,6 +104,7 @@
+ 		else if (!strcmp(ins,"LDY")) output[0] = 0xA0;
+ 		else if (!strcmp(ins,"LDA")) output[0] = 0xA1;
+ 		else if (!strcmp(ins,"LDX")) output[0] = 0xA2;
++		else if (!strcmp(ins,"LDZ")) output[0] = 0xA3;
+ 		else if (!strcmp(ins,"BCS")) output[0] = 0xB0;
+ 		else if (!strcmp(ins,"CPY")) output[0] = 0xC0;
+ 		else if (!strcmp(ins,"CMP")) output[0] = 0xC1;
+@@ -262,6 +269,7 @@
+ 	//these may be replaced later with passed-in values to make a lighter-weight disassembly mode that may not query the referenced values
+ 	#define RX (X.X)
+ 	#define RY (X.Y)
++	#define RZ (X.Z)
+ 
+ 	switch (opcode[0]) {
+ 		#define relative(a) { \
+@@ -293,8 +301,10 @@
+ 		#endif
+ 
+ 		//odd, 1-byte opcodes
++		case 0x02: strcpy(str,"TAZ"); break;
+ 		case 0x08: strcpy(str,"PHP"); break;
+ 		case 0x0A: strcpy(str,"ASL"); break;
++		case 0x12: strcpy(str,"TZA"); break;
+ 		case 0x18: strcpy(str,"CLC"); break;
+ 		case 0x28: strcpy(str,"PLP"); break;
+ 		case 0x2A: strcpy(str,"ROL"); break;
+@@ -307,6 +317,8 @@
+ 		case 0x68: strcpy(str,"PLA"); break;
+ 		case 0x6A: strcpy(str,"ROR"); break;
+ 		case 0x78: strcpy(str,"SEI"); break;
++		case 0x7A: strcpy(str,"PLZ"); break;
++		case 0x80: strcpy(str,"PHZ"); break;
+ 		case 0x88: strcpy(str,"DEY"); break;
+ 		case 0x8A: strcpy(str,"TXA"); break;
+ 		case 0x98: strcpy(str,"TYA"); break;
+@@ -316,6 +328,8 @@
+ 		case 0xB8: strcpy(str,"CLV"); break;
+ 		case 0xBA: strcpy(str,"TSX"); break;
+ 		case 0xC8: strcpy(str,"INY"); break;
++		case 0xFA: strcpy(str,"INZ"); break;
++		case 0xFB: strcpy(str,"DEZ"); break;
+ 		case 0xCA: strcpy(str,"DEX"); break;
+ 		case 0xD8: strcpy(str,"CLD"); break;
+ 		case 0xE8: strcpy(str,"INX"); break;
+@@ -352,12 +366,14 @@
+ 		case 0xA4: strcpy(chr,"LDY"); goto _zeropage;
+ 		case 0xA5: strcpy(chr,"LDA"); goto _zeropage;
+ 		case 0xA6: strcpy(chr,"LDX"); goto _zeropage;
++		case 0xA7: strcpy(chr,"LDZ"); goto _zeropage;
+ 		case 0xC4: strcpy(chr,"CPY"); goto _zeropage;
+ 		case 0xC5: strcpy(chr,"CMP"); goto _zeropage;
+ 		case 0xC6: strcpy(chr,"DEC"); goto _zeropage;
+ 		case 0xE4: strcpy(chr,"CPX"); goto _zeropage;
+ 		case 0xE5: strcpy(chr,"SBC"); goto _zeropage;
+ 		case 0xE6: strcpy(chr,"INC"); goto _zeropage;
++		case 0x82: strcpy(chr,"STZ"); goto _zeropage;
+ 		_zeropage:
+ 		// ################################## Start of SP CODE ###########################
+ 		// Change width to %04X // don't!
+@@ -373,11 +389,14 @@
+ 		//case 0x89: strcpy(chr,"STA"); goto _immediate;  //baka, no STA #imm!!
+ 		case 0xA0: strcpy(chr,"LDY"); goto _immediate;
+ 		case 0xA2: strcpy(chr,"LDX"); goto _immediate;
++		case 0xA3: strcpy(chr,"LDZ"); goto _immediate;
+ 		case 0xA9: strcpy(chr,"LDA"); goto _immediate;
+ 		case 0xC0: strcpy(chr,"CPY"); goto _immediate;
+ 		case 0xC9: strcpy(chr,"CMP"); goto _immediate;
+ 		case 0xE0: strcpy(chr,"CPX"); goto _immediate;
+ 		case 0xE9: strcpy(chr,"SBC"); goto _immediate;
++		case 0xF2: strcpy(chr,"DMA"); goto _immediate;
++		case 0xF3: strcpy(chr,"DVA"); goto _immediate;
+ 		_immediate:
+ 			sprintf(str,"%s #$%02X", chr,opcode[1]);
+ 			break;
+@@ -385,6 +404,7 @@
+ 		//Absolute
+ 		case 0x0D: strcpy(chr,"ORA"); goto _absolute;
+ 		case 0x0E: strcpy(chr,"ASL"); goto _absolute;
++		case 0x22: strcpy(chr,"LDZ"); goto _absolute;
+ 		case 0x2C: strcpy(chr,"BIT"); goto _absolute;
+ 		case 0x2D: strcpy(chr,"AND"); goto _absolute;
+ 		case 0x2E: strcpy(chr,"ROL"); goto _absolute;
+@@ -404,6 +424,7 @@
+ 		case 0xEC: strcpy(chr,"CPX"); goto _absolute;
+ 		case 0xED: strcpy(chr,"SBC"); goto _absolute;
+ 		case 0xEE: strcpy(chr,"INC"); goto _absolute;
++		case 0x92: strcpy(chr,"STZ"); goto _absolute;
+ 		_absolute:
+ 			absolute(tmp);
+ 			sprintf(str,"%s $%04X = #$%02X", chr,tmp,GetMem(tmp));
+@@ -448,12 +469,14 @@
+ 		case 0x76: strcpy(chr,"ROR"); goto _zeropagex;
+ 		case 0x94: strcpy(chr,"STY"); goto _zeropagex;
+ 		case 0x95: strcpy(chr,"STA"); goto _zeropagex;
++		case 0xAB: strcpy(chr,"LDZ"); goto _zeropagex;
+ 		case 0xB4: strcpy(chr,"LDY"); goto _zeropagex;
+ 		case 0xB5: strcpy(chr,"LDA"); goto _zeropagex;
+ 		case 0xD5: strcpy(chr,"CMP"); goto _zeropagex;
+ 		case 0xD6: strcpy(chr,"DEC"); goto _zeropagex;
+ 		case 0xF5: strcpy(chr,"SBC"); goto _zeropagex;
+ 		case 0xF6: strcpy(chr,"INC"); goto _zeropagex;
++		case 0x83: strcpy(chr,"STZ"); goto _zeropagex;
+ 		_zeropagex:
+ 			zpIndex(tmp,RX);
+ 		// ################################## Start of SP CODE ###########################
+@@ -461,12 +484,25 @@
+ 			sprintf(str,"%s $%02X,X @ $%04X = #$%02X", chr,opcode[1],tmp,GetMem(tmp));
+ 		// ################################## End of SP CODE ###########################
+ 			break;
+-
++		case 0x87: strcpy(chr,"STA"); goto _zeropagez;
++		case 0x89: strcpy(chr,"STX"); goto _zeropagez;
++		case 0x8B: strcpy(chr,"STY"); goto _zeropagez;
++		case 0xB7: strcpy(chr,"LDA"); goto _zeropagez;
++		case 0xBF: strcpy(chr,"LDX"); goto _zeropagez;
++		case 0x42: strcpy(chr,"LDY"); goto _zeropagez;
++        _zeropagez:
++			zpIndex(tmp,RZ);
++		// ################################## Start of SP CODE ###########################
++		// Change width to %04X // don't!
++			sprintf(str,"%s $%02X,Z @ $%04X = #$%02X", chr,opcode[1],tmp,GetMem(tmp));
++		// ################################## End of SP CODE ###########################
++			break;
+ 		//Absolute,Y
+ 		case 0x19: strcpy(chr,"ORA"); goto _absolutey;
+ 		case 0x39: strcpy(chr,"AND"); goto _absolutey;
+ 		case 0x59: strcpy(chr,"EOR"); goto _absolutey;
+ 		case 0x79: strcpy(chr,"ADC"); goto _absolutey;
++		case 0x97: strcpy(chr,"STZ"); goto _absolutey;
+ 		case 0x99: strcpy(chr,"STA"); goto _absolutey;
+ 		case 0xB9: strcpy(chr,"LDA"); goto _absolutey;
+ 		case 0xBE: strcpy(chr,"LDX"); goto _absolutey;
+@@ -488,18 +524,36 @@
+ 		case 0x7D: strcpy(chr,"ADC"); goto _absolutex;
+ 		case 0x7E: strcpy(chr,"ROR"); goto _absolutex;
+ 		case 0x9D: strcpy(chr,"STA"); goto _absolutex;
++		case 0xB2: strcpy(chr,"LDZ"); goto _absolutex;
+ 		case 0xBC: strcpy(chr,"LDY"); goto _absolutex;
+ 		case 0xBD: strcpy(chr,"LDA"); goto _absolutex;
+ 		case 0xDD: strcpy(chr,"CMP"); goto _absolutex;
+ 		case 0xDE: strcpy(chr,"DEC"); goto _absolutex;
+ 		case 0xFD: strcpy(chr,"SBC"); goto _absolutex;
+ 		case 0xFE: strcpy(chr,"INC"); goto _absolutex;
++		case 0x93: strcpy(chr,"STZ"); goto _absolutex;
+ 		_absolutex:
+ 			absolute(tmp);
+ 			tmp2=(tmp+RX);
+ 			sprintf(str,"%s $%04X,X @ $%04X = #$%02X", chr,tmp,tmp2,GetMem(tmp2));
+ 			break;
+-
++		case 0xBB: strcpy(chr,"LDA"); goto _absolutez;
++		case 0x9B: strcpy(chr,"STA"); goto _absolutez;
++		case 0x9C: strcpy(chr,"STX"); goto _absolutez;
++		case 0x9E: strcpy(chr,"STY"); goto _absolutez;
++		case 0x32: strcpy(chr,"LDX"); goto _absolutez;
++		case 0x52: strcpy(chr,"LDY"); goto _absolutez;
++		case 0xC3: strcpy(chr,"ADC"); goto _absolutez;
++		case 0xD3: strcpy(chr,"SBC"); goto _absolutez;
++		case 0xCF: strcpy(chr,"DEC"); goto _absolutez;
++		case 0xDF: strcpy(chr,"ORA"); goto _absolutez;
++		case 0xDB: strcpy(chr,"AND"); goto _absolutez;
++		case 0xEF: strcpy(chr,"INC"); goto _absolutez;
++		_absolutez:
++			absolute(tmp);
++			tmp2=(tmp+RZ);
++			sprintf(str,"%s $%04X,Z @ $%04X = #$%02X", chr,tmp,tmp2,GetMem(tmp2));
++			break;
+ 		//jumps
+ 		case 0x20: strcpy(chr,"JSR"); goto _jump;
+ 		case 0x4C: strcpy(chr,"JMP"); goto _jump;
+@@ -510,8 +564,10 @@
+ 			break;
+ 
+ 		//Zero Page,Y
++		case 0x8F: strcpy(chr,"STZ"); goto _zeropagey;
+ 		case 0x96: strcpy(chr,"STX"); goto _zeropagey;
+ 		case 0xB6: strcpy(chr,"LDX"); goto _zeropagey;
++		case 0xAF: strcpy(chr,"LDZ"); goto _zeropagey;
+ 		_zeropagey:
+ 			zpIndex(tmp,RY);
+ 		// ################################## Start of SP CODE ###########################
+diff -ENwbur src/cart.cpp src/cart.cpp
+--- src/cart.cpp	2018-06-20 11:40:06.231986100 +0500
++++ src/cart.cpp	2018-06-20 11:37:10.466503400 +0500
+@@ -38,11 +38,12 @@
+ #include <cstdio>
+ #include <climits>
+ 
+-uint8 *Page[32], *VPage[8];
++uint8 *Page[128];
++uint8 *VPage[40];
+ uint8 **VPageR = VPage;
+-uint8 *VPageG[8];
+-uint8 *MMC5SPRVPage[8];
+-uint8 *MMC5BGVPage[8];
++uint8 *VPageG[40];
++uint8 *MMC5SPRVPage[32];
++uint8 *MMC5BGVPage[32];
+ 
+ static uint8 PRGIsRAM[32];  /* This page is/is not PRG RAM. */
+ 
+@@ -51,7 +52,7 @@
+ uint8 PRGram[32];
+ 
+ uint8 *PRGptr[32];
+-uint8 *CHRptr[32];
++uint8 *CHRptr[128];
+ 
+ uint32 PRGsize[32];
+ uint32 CHRsize[32];
+@@ -95,6 +96,7 @@
+ }
+ 
+ static uint8 nothing[8192];
++static uint8 nothing2[8192*5];
+ void ResetCartMapping(void) {
+ 	int x;
+ 
+@@ -104,9 +106,19 @@
+ 		Page[x] = nothing - x * 2048;
+ 		PRGptr[x] = CHRptr[x] = 0;
+ 		PRGsize[x] = CHRsize[x] = 0;
++		for (x = 0; x < 32; x++)
++			CHRptr[x] = 0;
+ 	}
++
++
+ 	for (x = 0; x < 8; x++) {
+-		MMC5SPRVPage[x] = MMC5BGVPage[x] = VPageR[x] = nothing - 0x400 * x;
++		MMC5SPRVPage[x] = MMC5BGVPage[x] = nothing2- 0x400 * x;
++		//VPageR[x]= VPage[x] = 0;
++		VPageR[x]= VPage[x] = nothing2 - 0x400 * x;
++	}
++	for (x = 16; x < 24; x++) {
++		MMC5SPRVPage[x] = MMC5BGVPage[x] = nothing - 0x400 * x;
++		 VPageR[x]= VPage[x] = nothing2 - 0x2000 * x;
+ 	}
+ }
+ 
+@@ -256,27 +268,46 @@
+ 
+ void setchr8r(int r, uint32 V) {
+ 	int x;
++	int y;
++
+ 
+ 	if (!CHRptr[r]) return;
+ 	FCEUPPU_LineUpdate();
+ 	V &= CHRmask8[r];
+-	for (x = 7; x >= 0; x--)
++	//for (x = 39; x >= 32; x--)
++	//	VPageR[x] = &CHRptr[r][V << 13];
++
++	if (vt03_mode)
++	{
++		for (x = 31; x >= 16; x--)
++	   {
++		VPageR[x] = &CHRptr[r][V << 13]-0x2000;
++		
++	   }
++	//	for (x=0x4000; x<=0x6000; x++)
++	//		extra_ppu[x+0x4000] = VPageR[x>>10][x];
++
++	}
++	for (x = 31; x >= 0; x--)
+ 		VPageR[x] = &CHRptr[r][V << 13];
+ 	if (CHRram[r])
+-		PPUCHRRAM |= (255);
++		PPUCHRRAM |= 0xFF;
+ 	else
+ 		PPUCHRRAM = 0;
+ }
+ 
+ void setchr1(uint32 A, uint32 V) {
++//	if (A > 0xFFF)A += 0x3000;
+ 	setchr1r(0, A, V);
+ }
+ 
+ void setchr2(uint32 A, uint32 V) {
++//	if (A > 0xFFF)A += 0x3000;
+ 	setchr2r(0, A, V);
+ }
+ 
+ void setchr4(uint32 A, uint32 V) {
++//	if (A > 0xFFF)A += 0x3000;
+ 	setchr4r(0, A, V);
+ }
+ 
+@@ -289,6 +320,7 @@
+ void setntamem(uint8 *p, int ram, uint32 b) {
+ 	FCEUPPU_LineUpdate();
+ 	vnapage[b] = p;
++	vnapage2[b] = p;
+ 	PPUNTARAM &= ~(1 << b);
+ 	if (ram)
+ 		PPUNTARAM |= 1 << b;
+@@ -301,6 +333,10 @@
+ 	vnapage[1] = NTARAM + b * 0x400;
+ 	vnapage[2] = NTARAM + c * 0x400;
+ 	vnapage[3] = NTARAM + d * 0x400;
++	vnapage2[0] = NTARAM2 + a * 0x400;
++	vnapage2[1] = NTARAM2 + b * 0x400;
++	vnapage2[2] = NTARAM2 + c * 0x400;
++	vnapage2[3] = NTARAM2 + d * 0x400;
+ }
+ 
+ void setmirror(int t) {
+@@ -309,15 +345,19 @@
+ 		switch (t) {
+ 		case MI_H:
+ 			vnapage[0] = vnapage[1] = NTARAM; vnapage[2] = vnapage[3] = NTARAM + 0x400;
++			vnapage2[0] = vnapage2[1] = NTARAM2; vnapage2[2] = vnapage2[3] = NTARAM2 + 0x400;
+ 			break;
+ 		case MI_V:
+ 			vnapage[0] = vnapage[2] = NTARAM; vnapage[1] = vnapage[3] = NTARAM + 0x400;
++			vnapage2[0] = vnapage2[2] = NTARAM2; vnapage2[1] = vnapage2[3] = NTARAM2 + 0x400;
+ 			break;
+ 		case MI_0:
+ 			vnapage[0] = vnapage[1] = vnapage[2] = vnapage[3] = NTARAM;
++			vnapage2[0] = vnapage2[1] = vnapage2[2] = vnapage2[3] = NTARAM2;
+ 			break;
+ 		case MI_1:
+ 			vnapage[0] = vnapage[1] = vnapage[2] = vnapage[3] = NTARAM + 0x400;
++			vnapage2[0] = vnapage2[1] = vnapage2[2] = vnapage2[3] = NTARAM2 + 0x400;
+ 			break;
+ 		}
+ 		PPUNTARAM = 0xF;
+@@ -502,6 +542,7 @@
+ 			GenieBackup[x] = GetReadHandler(genieaddr[x]);
+ 			SetReadHandler(genieaddr[x], genieaddr[x], tmp[x]);
+ 		}
++
+ }
+ 
+ void FCEU_GeniePower(void) {
+@@ -522,7 +563,7 @@
+ 	SetReadHandler(0x8000, 0xFFFF, GenieRead);
+ 
+ 	for (x = 0; x < 8; x++)
+-		VPage[x] = GENIEROM + 4096 - 0x400 * x;
++		VPage[x] = GENIEROM + 4096+0x4000 - 0x400 * x;
+ 
+ 	if (AllocGenieRW())
+ 		VPageR = VPageG;
+diff -ENwbur src/cart.h src/cart.h
+--- src/cart.h	2018-06-20 11:40:06.247613100 +0500
++++ src/cart.h	2018-06-20 10:38:23.872394400 +0500
+@@ -31,8 +31,10 @@
+ void FCEU_LoadGameSave(CartInfo *LocalHWInfo);
+ void FCEU_ClearGameSave(CartInfo *LocalHWInfo);
+ 
+-extern uint8 *Page[32], *VPage[8], *MMC5SPRVPage[8], *MMC5BGVPage[8];
+-
++extern uint8 *Page[128], *MMC5SPRVPage[32], *MMC5BGVPage[32];
++extern uint8 *VPage[40];
++extern uint8 extra_ppu[0x10000];
++extern uint8 extra_ppu2[0x2000];
+ void ResetCartMapping(void);
+ void SetupCartPRGMapping(int chip, uint8 *p, uint32 size, int ram);
+ void SetupCartCHRMapping(int chip, uint8 *p, uint32 size, int ram);
+@@ -46,7 +48,7 @@
+ extern uint8 CHRram[32];
+ 
+ extern uint8 *PRGptr[32];
+-extern uint8 *CHRptr[32];
++extern uint8 *CHRptr[128];
+ 
+ extern uint32 PRGsize[32];
+ extern uint32 CHRsize[32];
+diff -ENwbur src/debug.cpp src/debug.cpp
+--- src/debug.cpp	2018-06-20 11:40:06.310109800 +0500
++++ src/debug.cpp	2018-06-20 10:45:15.722799100 +0500
+@@ -74,10 +74,11 @@
+ 		case 'B': return _P & B_FLAG ? 1 : 0;
+ 		case 'D': return _P & D_FLAG ? 1 : 0;
+ 		case 'I': return _P & I_FLAG ? 1 : 0;
+-		case 'Z': return _P & Z_FLAG ? 1 : 0;
++	//	case 'Z': return _P & Z_FLAG ? 1 : 0;
+ 		case 'C': return _P & C_FLAG ? 1 : 0;
+ 		case 'P': return _PC;
+ 		case 'S': return _S;
++		case 'Z':return _Z;
+ 	}
+ 
+ 	return 0;
+@@ -301,9 +302,9 @@
+ }
+ 
+ uint8 GetPPUMem(uint8 A) {
+-	uint16 tmp = FCEUPPU_PeekAddress() & 0x3FFF;
++	uint16 tmp = FCEUPPU_PeekAddress() & 0x4FFF;
+ 
+-	if (tmp<0x2000) return VPage[tmp>>10][tmp];
++	if (tmp<0x2000 || tmp>0x3fff) return VPage[tmp>>10][tmp];
+ 	if (tmp>=0x3F00) return PALRAM[tmp&0x1F];
+ 	return vnapage[(tmp>>10)&0x3][tmp&0x3FF];
+ }
+@@ -332,6 +333,7 @@
+ 		case 13: return _Y&(((address-_X)>>8)+1); // (SHY)
+ 		case 14: return _X&(((address-_Y)>>8)+1); // (SHX)
+ 		case 15: return _S& (((address-_Y)>>8)+1); // (TAS)
++		case 16: return _Z; // STY
+ 	}
+ 	return 0;
+ }
+@@ -856,6 +858,8 @@
+ 		case 6: A = (opcode[1] | (opcode[2] << 8)) + _Y; break;
+ 		case 7: A = (opcode[1] | (opcode[2] << 8)) + _X; break;
+ 		case 8: A = opcode[1] + _Y; break;
++		case 9: A = (opcode[1] | (opcode[2] << 8)) + _Z; break;
++		case 10: A = opcode[1] + _Z; break;
+ 	}
+ 
+ 	if (numWPs || dbgstate.step || dbgstate.runline || dbgstate.stepout || watchpoint[64].flags || dbgstate.badopbreak || break_on_cycles || break_on_instructions || break_asap)
+diff -ENwbur src/debug.h src/debug.h
+--- src/debug.h	2018-06-20 11:40:06.325792000 +0500
++++ src/debug.h	2018-06-20 10:45:52.690937800 +0500
+@@ -28,16 +28,16 @@
+ 	      /*0,    1, 2, 3,    4,    5,         6, 7, 8,    9, A, B,    C,    D,         E, F*/
+ /*0x00*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+ /*0x10*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+-/*0x20*/	0, WP_R, 0, 0, WP_R, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0, WP_R, WP_R, WP_R|WP_W, 0,
+-/*0x30*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+-/*0x40*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+-/*0x50*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
++/*0x20*/	0, WP_R, WP_R, 0, WP_R, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0, WP_R, WP_R, WP_R|WP_W, 0,
++/*0x30*/	0, WP_R, WP_R, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
++/*0x40*/	0, WP_R, WP_R, 0,    0, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0,    0, WP_R, WP_R|WP_W, 0,
++/*0x50*/	0, WP_R, WP_R, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+ /*0x60*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0, WP_R, WP_R, WP_R|WP_W, 0,
+ /*0x70*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+-/*0x80*/	0, WP_W, 0, 0, WP_W, WP_W,      WP_W, 0, 0,    0, 0, 0, WP_W, WP_W,      WP_W, 0,
+-/*0x90*/	0, WP_W, 0, 0, WP_W, WP_W,      WP_W, 0, 0, WP_W, 0, 0,    0, WP_W,         0, 0,
+-/*0xA0*/	0, WP_R, 0, 0, WP_R, WP_R,      WP_R, 0, 0,    0, 0, 0, WP_R, WP_R,      WP_R, 0,
+-/*0xB0*/	0, WP_R, 0, 0, WP_R, WP_R,      WP_R, 0, 0, WP_R, 0, 0, WP_R, WP_R,      WP_R, 0,
++/*0x80*/	0, WP_W, WP_W, WP_W, WP_W, WP_W,      WP_W, WP_W, 0,    WP_W, 0, WP_W, WP_W, WP_W,      WP_W, WP_W,
++/*0x90*/	0, WP_W, WP_W, WP_W, WP_W, WP_W,      WP_W, WP_W, 0, WP_W, 0, WP_W,    WP_W, WP_W,         WP_W, 0,
++/*0xA0*/	0, WP_R, 0, WP_R, WP_R, WP_R, WP_R, WP_R, 0,   0, 0, WP_R, WP_R, WP_R,  WP_R, WP_R,
++/*0xB0*/	0, WP_R, WP_R, WP_R, WP_R, WP_R,      WP_R, WP_R, 0, WP_R, 0, WP_R, WP_R, WP_R,      WP_R,WP_R,
+ /*0xC0*/	0, WP_R, 0, 0, WP_R, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0, WP_R, WP_R, WP_R|WP_W, 0,
+ /*0xD0*/	0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0, 0, WP_R, 0, 0,    0, WP_R, WP_R|WP_W, 0,
+ /*0xE0*/	0, WP_R, 0, 0, WP_R, WP_R, WP_R|WP_W, 0, 0,    0, 0, 0, WP_R, WP_R, WP_R|WP_W, 0,
+@@ -112,11 +112,12 @@
+ //-------------
+ 
+ //internal variables that debuggers will want access to
+-extern uint8 *vnapage[4],*VPage[8];
+-extern uint8 PPU[4],PALRAM[0x20],SPRAM[0x100],VRAMBuffer,PPUGenLatch,XOffset;
++extern uint8 *vnapage[4];
++extern uint8 *VPage[40];
++extern uint8 PALRAM[0x100],SPRAM[0x400],VRAMBuffer,PPUGenLatch,XOffset;
+ extern uint32 FCEUPPU_PeekAddress();
+ extern int numWPs;
+-
++extern int PPU[4];
+ ///encapsulates the operational state of the debugger core
+ class DebuggerState {
+ public:
+diff -ENwbur src/drivers/win/cdlogger.cpp src/drivers/win/cdlogger.cpp
+--- src/drivers/win/cdlogger.cpp	2018-06-20 11:40:11.703253200 +0500
++++ src/drivers/win/cdlogger.cpp	2018-06-20 10:16:18.150880700 +0500
+@@ -563,7 +563,7 @@
+ 		cdloggervdata = (unsigned char*)malloc(cdloggerVideoDataSize);
+ 	} else {
+ 		cdloggerVideoDataSize = 0;
+-		cdloggervdata = (unsigned char*)malloc(8192);
++		cdloggervdata = (unsigned char*)malloc(8192*4);
+ 	}
+ }
+ 
+@@ -576,8 +576,8 @@
+ 		undefinedvromcount = cdloggerVideoDataSize;
+ 		ZeroMemory(cdloggervdata, cdloggerVideoDataSize);
+ 	} else {
+-		undefinedvromcount = 8192;
+-		ZeroMemory(cdloggervdata, 8192);
++		undefinedvromcount = 8192*4;
++		ZeroMemory(cdloggervdata, 8192*4);
+ 	}
+ }
+ 
+diff -ENwbur src/drivers/win/debugger.cpp src/drivers/win/debugger.cpp
+--- src/drivers/win/debugger.cpp	2018-06-20 11:40:11.828253600 +0500
++++ src/drivers/win/debugger.cpp	2018-06-20 10:32:56.032089700 +0500
+@@ -823,6 +823,7 @@
+ 		X.X = GetEditHex(hwndDlg,IDC_DEBUGGER_VAL_X);
+ 		X.Y = GetEditHex(hwndDlg,IDC_DEBUGGER_VAL_Y);
+ 		X.PC = GetEditHex(hwndDlg,IDC_DEBUGGER_VAL_PC);
++		X.Z = GetEditHex(hwndDlg,IDC_DEBUGGER_VAL_Z);
+ 	}
+ }
+ 
+@@ -968,6 +969,8 @@
+ 	SetDlgItemText(hDebug, IDC_DEBUGGER_VAL_X, str);
+ 	sprintf(str, "%02X", X.Y);
+ 	SetDlgItemText(hDebug, IDC_DEBUGGER_VAL_Y, str);
++	sprintf(str, "%02X", X.Z);
++	SetDlgItemText(hDebug, IDC_DEBUGGER_VAL_Z, str);
+ 	sprintf(str, "%04X", (int)X.PC);
+ 	SetDlgItemText(hDebug, IDC_DEBUGGER_VAL_PC, str);
+ 
+diff -ENwbur src/drivers/win/input.cpp src/drivers/win/input.cpp
+--- src/drivers/win/input.cpp	2018-06-20 11:40:12.000128300 +0500
++++ src/drivers/win/input.cpp	2018-06-20 10:34:00.869823400 +0500
+@@ -128,7 +128,7 @@
+ 
+ #define GPZ()   {MKZ(), MKZ(), MKZ(), MKZ(), MKZ(), MKZ(), MKZ(), MKZ()}
+ 
+-ButtConfig GamePadConfig[4][12]={
++ButtConfig GamePadConfig[8][12]={
+ 	//Gamepad 1
+ 	{
+ 		MK(F), MK(D), MK(S), MK(ENTER),
+@@ -142,9 +142,18 @@
+ 	GPZ(),
+ 
+ 	//Gamepad 4
++	GPZ(),
++    GPZ(),
++
++	//Gamepad 3
++	GPZ(),
++
++	//Gamepad 4
++	GPZ(),
+ 	GPZ()
+ };
+ 
++
+ ButtConfig GamePadPreset1[4][12]={GPZ(),GPZ(),GPZ(),GPZ()};
+ ButtConfig GamePadPreset2[4][12]={GPZ(),GPZ(),GPZ(),GPZ()};
+ ButtConfig GamePadPreset3[4][12]={GPZ(),GPZ(),GPZ(),GPZ()};
+diff -ENwbur src/drivers/win/memview.cpp src/drivers/win/memview.cpp
+--- src/drivers/win/memview.cpp	2018-06-20 11:40:12.453306000 +0500
++++ src/drivers/win/memview.cpp	2018-06-20 10:33:32.010023100 +0500
+@@ -117,9 +117,9 @@
+ 	{0x0000,0x2000, MODE_NES_MEMORY, ID_ADDRESS_FRZ_SUBMENU,    "Freeze/Unfreeze This Address"},
+ 	{0x6000,0x7FFF, MODE_NES_MEMORY, ID_ADDRESS_FRZ_SUBMENU,    "Freeze/Unfreeze This Address"},
+ 	{0x0000,0xFFFF, MODE_NES_MEMORY, ID_ADDRESS_ADDBP_R,        "Add Debugger Read Breakpoint"},
+-	{0x0000,0x3FFF, MODE_NES_PPU,    ID_ADDRESS_ADDBP_R,        "Add Debugger Read Breakpoint"},
++	{0x0000,0x7fff, MODE_NES_PPU,    ID_ADDRESS_ADDBP_R,        "Add Debugger Read Breakpoint"},
+ 	{0x0000,0xFFFF, MODE_NES_MEMORY, ID_ADDRESS_ADDBP_W,        "Add Debugger Write Breakpoint"},
+-	{0x0000,0x3FFF, MODE_NES_PPU,    ID_ADDRESS_ADDBP_W,        "Add Debugger Write Breakpoint"},
++	{0x0000,0x7fff, MODE_NES_PPU,    ID_ADDRESS_ADDBP_W,        "Add Debugger Write Breakpoint"},
+ 	{0x0000,0xFFFF, MODE_NES_MEMORY, ID_ADDRESS_ADDBP_X,        "Add Debugger Execute Breakpoint"},
+ 	{0x8000,0xFFFF, MODE_NES_MEMORY, ID_ADDRESS_SEEK_IN_ROM,    "Go Here In ROM File"},
+ 	{0x8000,0xFFFF, MODE_NES_MEMORY, ID_ADDRESS_CREATE_GG_CODE, "Create Game Genie Code At This Address"},
+@@ -673,8 +673,11 @@
+ 
+ 	if (EditingMode == MODE_NES_PPU)
+ 	{
+-		i &= 0x3FFF;
+-		if(i < 0x2000)return VPage[(i)>>10][(i)];
++		i &= 0x3fff;
++		int i2;
++		i2 &= 0x3fff;
++		if(i < 0x2000 || i > 0x3fff)return VPage[(i)>>10][(i)];
++		//if (i2 > 0x3fff && i2 <0x5000)return VPage[(i) >> 10][(i)];
+ 		//NSF PPU Viewer crash here (UGETAB) (Also disabled by 'MaxSize = 0x2000')
+ 		if (GameInfo->type==GIT_NSF)
+ 		{
+@@ -1010,13 +1013,13 @@
+ 		} else if (EditingMode == MODE_NES_PPU)
+ 		{
+ 			// PPU
+-			addr &= 0x3FFF;
+-			if(addr < 0x2000)
++			addr &= 0x7fff;
++			if(addr < 0x2000 || addr > 0x3fff)
+ 				VPage[addr>>10][addr] = data[i]; //todo: detect if this is vrom and turn it red if so
+ 			if((addr >= 0x2000) && (addr < 0x3F00))
+ 				vnapage[(addr>>10)&0x3][addr&0x3FF] = data[i]; //todo: this causes 0x3000-0x3f00 to mirror 0x2000-0x2f00, is this correct?
+-			if((addr >= 0x3F00) && (addr < 0x3FFF))
+-				PALRAM[addr&0x1F] = data[i];
++			if((addr >= 0x3F00) || addr <=0x3fff)
++				PALRAM[addr&0xFF] = data[i];
+ 		} else if (EditingMode == MODE_NES_OAM)
+ 		{
+ 			addr &= 0xFF;
+@@ -1890,7 +1893,7 @@
+ 
+ 		case MENU_MV_FILE_DUMP_RAM:
+ 			{
+-				char bar[0x800];
++				char bar[0x2000];
+ 				unsigned int i;
+ 				for (i=0;i<sizeof(bar);i++) bar[i] = GetMem(i);
+ 
+@@ -1914,26 +1917,26 @@
+ 				for (i=0;i<sizeof(bar);i++)
+ 				{
+ 					//							bar[i] = GetPPUMem(i);
+-					i &= 0x3FFF;
+-					if(i < 0x2000) bar[i] = VPage[(i)>>10][(i)];
++				//	i &= 0x4fff;
++					if(i < 0x2000 || i > 0x3fff) bar[i] = VPage[(i)>>10][(i)];
+ 					else if(i < 0x3F00) bar[i] = vnapage[(i>>10)&0x3][i&0x3FF];
+-					else bar[i] = PALRAM[i&0x1F];
++					else bar[i] = PALRAM[i&0xFF];
+ 				}
+ 				dumpToFile(bar, sizeof(bar));
+ 				return 0;
+ 			}
+ 		case MENU_MV_FILE_DUMP_OAM:
+ 			{
+-				char bar[0x100];
++				char bar[0x400];
+ 				unsigned int i;
+-				for (i=0;i<0x100;i++) bar[i] = SPRAM[i];
+-				dumpToFile(bar,0x100);
++				for (i=0;i<0x400;i++) bar[i] = SPRAM[i];
++				dumpToFile(bar,0x400);
+ 				return 0;
+ 			}
+ 
+ 		case MENU_MV_FILE_LOAD_RAM:
+ 			{
+-				char bar[0x800];
++				char bar[0x2000];
+ 				if (loadFromFile(bar, sizeof(bar)))
+ 				{
+ 					for (uint16 addr=0; addr<sizeof(bar); ++addr)
+@@ -1949,12 +1952,12 @@
+ 					for (uint16 addr=0; addr<sizeof(bar); ++addr)
+ 					{
+ 						char v = bar[addr];
+-						if(addr < 0x2000)
++						if(addr < 0x2000 || addr > 0x3fff)
+ 							VPage[addr>>10][addr] = v; //todo: detect if this is vrom and turn it red if so
+ 						if((addr >= 0x2000) && (addr < 0x3F00))
+ 							vnapage[(addr>>10)&0x3][addr&0x3FF] = v; //todo: this causes 0x3000-0x3f00 to mirror 0x2000-0x2f00, is this correct?
+-						if((addr >= 0x3F00) && (addr < 0x3FFF))
+-							PALRAM[addr&0x1F] = v;
++						if((addr >= 0x3F00) && (addr < 0x4000))
++							PALRAM[addr&0xFF] = v;
+ 					}
+ 				}
+ 				return 0;
+@@ -2044,8 +2047,8 @@
+ 				MaxSize = 0x10000;
+ 			if (EditingMode == MODE_NES_PPU)
+ 			{
+-				if (GameInfo->type==GIT_NSF) {MaxSize = 0x2000;} //Also disabled under GetMemViewData
+-				else {MaxSize = 0x4000;}
++				if (GameInfo->type==GIT_NSF) {MaxSize = 0x3000;} //Also disabled under GetMemViewData
++				else {MaxSize = 0x8000;}
+ 			}
+ 			if (EditingMode == MODE_NES_OAM)
+ 				MaxSize = 0x100;
+diff -ENwbur src/drivers/win/ntview.cpp src/drivers/win/ntview.cpp
+--- src/drivers/win/ntview.cpp	2018-06-20 11:40:12.625131100 +0500
++++ src/drivers/win/ntview.cpp	2018-06-20 10:34:25.404205500 +0500
+@@ -46,7 +46,7 @@
+ 
+ int NTViewPosX,NTViewPosY;
+ 
+-static uint8 palcache[36]; //palette cache
++static uint8 palcache[256+4]; //palette cache
+ int NTViewScanline=0,NTViewer=0;
+ int NTViewSkip;
+ int NTViewRefresh = 0;
+@@ -191,17 +191,21 @@
+ 
+ INLINE void DrawChr(uint8 *pbitmap,const uint8 *chr,int pal){
+ 	int y, x, tmp, index=0, p=0;
+-	uint8 chr0, chr1;
++	uint8 chr0, chr1, chr2, chr3;
+ 	//uint8 *table = &VPage[0][0]; //use the background table
+ 	//pbitmap += 3*
+ 
+ 	for (y = 0; y < 8; y++) { //todo: use index for y?
+ 		chr0 = chr[index];
+ 		chr1 = chr[index+8];
++		chr2 = chr[index+16];
++		chr3 = chr[index+24];
+ 		tmp=7;
+ 		for (x = 0; x < 8; x++) { //todo: use tmp for x?
+ 			p = (chr0>>tmp)&1;
+ 			p |= ((chr1>>tmp)&1)<<1;
++			p |= ((chr2>>tmp)&1)<<2;
++			p |= ((chr3>>tmp)&1)<<3;
+ 			p = palcache[p+(pal*4)];
+ 			tmp--;
+ 
+diff -ENwbur src/drivers/win/ppuview.cpp src/drivers/win/ppuview.cpp
+--- src/drivers/win/ppuview.cpp	2018-06-20 11:40:12.703254200 +0500
++++ src/drivers/win/ppuview.cpp	2018-06-20 10:35:36.653734700 +0500
+@@ -27,16 +27,16 @@
+ 
+ HWND hPPUView;
+ 
+-extern uint8 *VPage[8];
+-extern uint8 PALRAM[0x20];
++extern uint8 *VPage[40];
++extern uint8 PALRAM[0x100];
+ 
+ int PPUViewPosX, PPUViewPosY;
+ bool PPUView_maskUnusedGraphics = true;
+ bool PPUView_invertTheMask = false;
+ int PPUView_sprite16Mode = 0;
+ 
+-static uint8 palcache[36] = { 0xFF }; //palette cache
+-uint8 chrcache0[0x1000], chrcache1[0x1000], logcache0[0x1000], logcache1[0x1000]; //cache CHR, fixes a refresh problem when right-clicking
++static uint8 palcache[256] = { 0xFF }; //palette cache
++uint8 chrcache0[0x4000], chrcache1[0x4000], logcache0[0x4000], logcache1[0x4000]; //cache CHR, fixes a refresh problem when right-clicking
+ uint8 *pattern0, *pattern1; //pattern table bitmap arrays
+ uint8 *ppuv_palette;
+ static int pindex0 = 0, pindex1 = 0;
+@@ -45,15 +45,15 @@
+ int PPUViewRefresh = 0;
+ int mouse_x, mouse_y;
+ 
+-#define PATTERNWIDTH          128
+-#define PATTERNHEIGHT         128
++#define PATTERNWIDTH      128  //  128*1,5
++#define PATTERNHEIGHT         256
+ #define PATTERNBITWIDTH       PATTERNWIDTH*3
+ #define PATTERNDESTX_BASE     7
+-#define PATTERNDESTY_BASE     18
++#define PATTERNDESTY_BASE     24
+ #define ZOOM                  2
+ 
+ #define PALETTEWIDTH          32*4*4
+-#define PALETTEHEIGHT         32*2
++#define PALETTEHEIGHT         32*8
+ #define PALETTEBITWIDTH       PALETTEWIDTH*3
+ #define PALETTEDESTX_BASE     7
+ #define PALETTEDESTY_BASE     18
+@@ -89,9 +89,9 @@
+ 	}
+ 	PPUViewSkip = 0;
+ 
+-	StretchBlt(pDC, patternDestX, patternDestY, PATTERNWIDTH * ZOOM, PATTERNHEIGHT * ZOOM, TmpDC0, 0, PATTERNHEIGHT - 1, PATTERNWIDTH, -PATTERNHEIGHT, SRCCOPY);
+-	StretchBlt(pDC, patternDestX + (PATTERNWIDTH * ZOOM) + 1, patternDestY, PATTERNWIDTH * ZOOM, PATTERNHEIGHT * ZOOM, TmpDC1, 0, PATTERNHEIGHT - 1, PATTERNWIDTH, -PATTERNHEIGHT, SRCCOPY);
+-	StretchBlt(pDC, paletteDestX, paletteDestY, PALETTEWIDTH, PALETTEHEIGHT, TmpDC2, 0, PALETTEHEIGHT - 1, PALETTEWIDTH, -PALETTEHEIGHT, SRCCOPY);
++	StretchBlt(pDC, patternDestX, patternDestY, PATTERNWIDTH * ZOOM, PATTERNHEIGHT * ZOOM, TmpDC0, 0, PATTERNHEIGHT - 0, PATTERNWIDTH, -PATTERNHEIGHT, SRCCOPY);
++	StretchBlt(pDC, patternDestX + (PATTERNWIDTH * ZOOM) + 1, patternDestY, PATTERNWIDTH * ZOOM, PATTERNHEIGHT * ZOOM, TmpDC1, 0, PATTERNHEIGHT - 0, PATTERNWIDTH, -PATTERNHEIGHT, SRCCOPY);
++	StretchBlt(pDC, paletteDestX, paletteDestY, PALETTEWIDTH, PALETTEHEIGHT, TmpDC2, 0, PALETTEHEIGHT - 0, PALETTEWIDTH, -PALETTEHEIGHT, SRCCOPY);
+ }
+ 
+ //---------CDLogger VROM
+@@ -102,11 +102,13 @@
+ {
+ 	int i,j,k,x,y,index=0;
+ 	int p=0,tmp;
+-	uint8 chr0,chr1,logs,shift;
++	uint8 chr0,chr1,logs,shift,chr2,chr3;
+ 	uint8 *pbitmap = bitmap;
+ 
+-	pal <<= 2;
+-	for (i = 0; i < (16 >> PPUView_sprite16Mode); i++)		//Columns
++	if(vt03_mode)pal <<= 4;
++	else pal <<=2;
++
++	for (i = 0; i < (32 >> PPUView_sprite16Mode); i++)		//Columns
+ 	{
+ 		for (j = 0; j < 16; j++)	//Rows
+ 		{
+@@ -116,13 +118,24 @@
+ 				{
+ 					chr0 = table[index];
+ 					chr1 = table[index + 8];
++					chr2 = table[index + 16];
++					chr3 = table[index + 24];
++					if(vt03_mode)logs = log[index] & log[index + 8] & log[index + 16] & log[index + 24];
++					else 
+ 					logs = log[index] & log[index + 8];
+ 					tmp = 7;
+-					shift=(PPUView_maskUnusedGraphics && debug_loggingCD && (((logs & 3) != 0) == PPUView_invertTheMask))?3:0;
++					if(vt03_mode)shift=(PPUView_maskUnusedGraphics && debug_loggingCD && (((logs & 0xF) != 0) == PPUView_invertTheMask))?0xF:0;
++					else 
++						shift=(PPUView_maskUnusedGraphics && debug_loggingCD && (((logs & 0x3) != 0) == PPUView_invertTheMask))?0x3:0;
+ 					for (x = 0; x < 8; x++)
+ 					{
+ 						p  =  (chr0 >> tmp) & 1;
+ 						p |= ((chr1 >> tmp) & 1) << 1;
++					if(vt03_mode)
++					{
++						p |= ((chr2 >> tmp) & 1) << 2;
++						p |= ((chr3 >> tmp) & 1) << 3;
++					}
+ 						p = palcache[p | pal];
+ 						tmp--;
+ 						*(uint8*)(pbitmap++) = palo[p].b >> shift;
+@@ -132,6 +145,8 @@
+ 					index++;
+ 					pbitmap += (PATTERNBITWIDTH-24);
+ 				}
++				if(vt03_mode)index+=24;
++				else 
+ 				index+=8;
+ 			}
+ 			pbitmap -= ((PATTERNBITWIDTH<<(3+PPUView_sprite16Mode))-24);
+@@ -154,18 +169,33 @@
+ 
+ 	if(refreshchr)
+ 	{
+-		for (i = 0, x=0x1000; i < 0x1000; i++, x++)
++		for (i = 0, x=0x8000; i < 0x4000; i++, x++)
++		{
++			if(i<0x2000)chrcache0[i] = VPage[i>>10][i];
++			else chrcache0[i] = extra_ppu[x-0x2000];
++			if(vt03_mode)
++			{
++			if(i<0x2000)chrcache1[i] = extra_ppu[0x2000+x];
++			else chrcache1[i] = extra_ppu[i+0xC000];
++			}
++			else
+ 		{
+-			chrcache0[i] = VPage[i>>10][i];
+-			chrcache1[i] = VPage[x>>10][x];
++            if(i<0x2000)chrcache1[i] = extra_ppu[x];
++			else chrcache1[i] = extra_ppu[i+0xC000];
++			}
+ 			if (debug_loggingCD) {
+ 				if (cdloggerVideoDataSize)
+ 				{
+ 					int addr;
+-					addr = &VPage[i >> 10][i] - CHRptr[0];
++					if(vt03_mode)
++			{
++					if(i<0x2000)addr = (uint8*)&VPage[i >> 10][i] - CHRptr[0];
++					else addr = (uint8*)&extra_ppu[x-0x2000] - CHRptr[0];
++			}
+ 					if ((addr >= 0) && (addr < (int)cdloggerVideoDataSize))
+ 						logcache0[i] = cdloggervdata[addr];
+-					addr = &VPage[x >> 10][x] - CHRptr[0];
++					if(i<0x2000)addr = (uint8*)&extra_ppu[0x2000+x] - CHRptr[0];
++					else addr = (uint8*)&extra_ppu[i+0xC000] - CHRptr[0];
+ 					if ((addr >= 0) && (addr < (int)cdloggerVideoDataSize))
+ 						logcache1[i] = cdloggervdata[addr];
+ 				} else {
+@@ -177,25 +207,100 @@
+ 	}
+ 
+ 	// update palette only if required
+-	if (memcmp(palcache, PALRAM, 32) != 0)
++	if (memcmp(palcache, PALRAM, 256) != 0)
+ 	{
+ 		// bbit note: let para know that this if is useless and
+ 		// will not work because of the lines below that change
+ 		// palcache which will make it not equal next time
+ 
+ 		// cache palette content
+-		memcpy(palcache,PALRAM,32);
++		memcpy(palcache,PALRAM,256);
+ 		palcache[0x10] = palcache[0x00];
++
++if(!vt03_mode){
+ 		palcache[0x14] = palcache[0x00];
+ 		palcache[0x18] = palcache[0x00];
+ 		palcache[0x1C] = palcache[0x00];
++palcache[0x24] = palcache[0x00];
++palcache[0x28] = palcache[0x00];
++palcache[0x2C] = palcache[0x00];
++palcache[0x34] = palcache[0x00];
++palcache[0x38] = palcache[0x00];
++palcache[0x3C] = palcache[0x00];
++palcache[0x44] = palcache[0x00];
++palcache[0x48] = palcache[0x00];
++palcache[0x4C] = palcache[0x00];
++palcache[0x54] = palcache[0x00];
++palcache[0x58] = palcache[0x00];
++palcache[0x5C] = palcache[0x00];
++palcache[0x64] = palcache[0x00];
++palcache[0x68] = palcache[0x00];
++palcache[0x6C] = palcache[0x00];
++palcache[0x74] = palcache[0x00];
++palcache[0x78] = palcache[0x00];
++palcache[0x7C] = palcache[0x00];
++palcache[0x84] = palcache[0x00];
++palcache[0x88] = palcache[0x00];
++palcache[0x8C] = palcache[0x00];
++palcache[0x94] = palcache[0x00];
++palcache[0x98] = palcache[0x00];
++palcache[0x9C] = palcache[0x00];
++palcache[0xA4] = palcache[0x00];
++palcache[0xA8] = palcache[0x00];
++palcache[0xAC] = palcache[0x00];
++palcache[0xB4] = palcache[0x00];
++palcache[0xB8] = palcache[0x00];
++palcache[0xBC] = palcache[0x00];
++palcache[0xC4] = palcache[0x00];
++palcache[0xC8] = palcache[0x00];
++palcache[0xCC] = palcache[0x00];
++palcache[0xD4] = palcache[0x00];
++palcache[0xD8] = palcache[0x00];
++palcache[0xDC] = palcache[0x00];
++palcache[0xE4] = palcache[0x00];
++palcache[0xE8] = palcache[0x00];
++palcache[0xEC] = palcache[0x00];
++palcache[0xF4] = palcache[0x00];
++		palcache[0xF8] = palcache[0x00];
++		palcache[0xFC] = palcache[0x00];
++
++	}
++palcache[0x20] = palcache[0x00];
++
++palcache[0x30] = palcache[0x00];
++
++palcache[0x40] = palcache[0x00];
++
++palcache[0x50] = palcache[0x00];
++
++palcache[0x60] = palcache[0x00];
++
++palcache[0x70] = palcache[0x00];
++
++palcache[0x80] = palcache[0x00];
++
++palcache[0x90] = palcache[0x00];
++               
++		palcache[0xA0] = palcache[0x00];
++	
++		palcache[0xB0] = palcache[0x00];
++		
++		palcache[0xC0] = palcache[0x00];
++		
++		palcache[0xD0] = palcache[0x00];
++		
++		palcache[0xE0] = palcache[0x00];
++		
++		palcache[0xF0] = palcache[0x00];
++		
++
+ 
+ 		//draw palettes
+ 		for (y = 0; y < PALETTEHEIGHT; y++)
+ 		{
+ 			for (x = 0; x < PALETTEWIDTH; x++)
+ 			{
+-				i = (((y>>5)<<4)+(x>>5));
++				i = (((y>>4)<<4)+(x>>5));
+ 				*(uint8*)(pbitmap++) = palo[palcache[i]].b;
+ 				*(uint8*)(pbitmap++) = palo[palcache[i]].g;
+ 				*(uint8*)(pbitmap++) = palo[palcache[i]].r;
+@@ -211,7 +316,7 @@
+ 				*(uint8*)(pbitmap++) = 0;
+ 		}
+ 		pbitmap = (ppuv_palette-3);
+-		for (y = 0; y < 64*3; y++)
++		for (y = 0; y < 64*3*4; y++)
+ 		{
+ 			if (!(y%3)) pbitmap += (32*4*3);
+ 			for (x = 0; x < 6; x++)
+@@ -220,7 +325,7 @@
+ 			}
+ 			pbitmap += ((32*4*3)-6);
+ 		}
+-		memcpy(palcache,PALRAM,32);        //palcache which will make it not equal next time
++		memcpy(palcache,PALRAM,256);        //palcache which will make it not equal next time
+ 	}
+ 
+ 	DrawPatternTable(pattern0,chrcache0,logcache0,pindex0);
+@@ -429,10 +534,10 @@
+ 
+ 			//clear cache
+ 			memset(palcache,0,32);
+-			memset(chrcache0,0,0x1000);
+-			memset(chrcache1,0,0x1000);
+-			memset(logcache0,0,0x1000);
+-			memset(logcache1,0,0x1000);
++			memset(chrcache0,0,0x4000);
++			memset(chrcache1,0,0x4000);
++			memset(logcache0,0,0x4000);
++			memset(logcache1,0,0x4000);
+ 
+ 			// forced palette (e.g. for debugging CHR when palettes are all-black)
+ 			palcache[(8*4)+0] = 0x0F;
+@@ -535,7 +640,7 @@
+ 				else if(((mouse_x >= paletteDestX) && (mouse_x < (paletteDestX + PALETTEWIDTH))) && (mouse_y >= paletteDestY) && (mouse_y < (paletteDestY + PALETTEHEIGHT)))
+ 				{
+ 					mouse_x = (mouse_x - paletteDestX) / 32;
+-					mouse_y = (mouse_y - paletteDestY) / 32;
++					mouse_y = (mouse_y - paletteDestY) / 16;
+ 					int ix = (mouse_y<<4)|mouse_x;
+ 					if ((ix & 0x10) && !(ix & 0x03)) ix = 0; // palcache 0x10/14/18/1C is bogus $00 values
+ 					sprintf(str,"Palette: $%02X",palcache[ix]);
+diff -ENwbur src/drivers/win/resource.h src/drivers/win/resource.h
+--- src/drivers/win/resource.h	2018-06-20 11:40:12.890780700 +0500
++++ src/drivers/win/resource.h	2018-06-20 11:39:46.716422400 +0500
+@@ -1247,6 +1247,7 @@
+ #define DISASM_CONTEXT_COPY             40598
+ #define MENU_MV_FILE_LOAD_OAM           40599
+ #define DISASM_CONTEXT_SELECTALL        40599
++#define IDC_DEBUGGER_VAL_Z              40600
+ #define IDC_DEBUGGER_ICONTRAY           55535
+ #define MW_ValueLabel2                  65423
+ #define MW_ValueLabel1                  65426
+diff -ENwbur src/drivers/win/texthook.cpp src/drivers/win/texthook.cpp
+--- src/drivers/win/texthook.cpp	2018-06-20 11:40:12.984502900 +0500
++++ src/drivers/win/texthook.cpp	2018-06-20 10:36:04.715046500 +0500
+@@ -49,10 +49,10 @@
+ extern void FCEUD_BlitScreen(uint8 *XBuf); //needed for pause, not sure where this is defined...
+ //adelikat merge 7/1/08 - had to add these extern variables 
+ //------------------------------
+-extern uint8 PALRAM[0x20];
+-extern uint8 PPU[4];
++extern uint8 PALRAM[0x100];
++extern int PPU[4];
+ extern uint8 *vnapage[4];
+-extern uint8 *VPage[8];
++extern uint8 *VPage[40];
+ //------------------------------
+ HWND hTextHooker;
+ 
+@@ -303,14 +303,14 @@
+ 			if ( EmulationPaused == 1 ) {
+ 				//if the selection has changed since we paused
+ 				if ( tileToggles[x][y] != pausedTileToggles[x][y] ) {
+-					DrawTextHookerChr(pbitmap,&VPage[(ptable+chr)>>10][ptable+chr],tileattr,1);
++					DrawTextHookerChr(pbitmap,(uint8*)&VPage[(ptable+chr)>>10][ptable+chr],tileattr,1);
+ 				} else { //nothing has changed since we paused
+-					DrawTextHookerChr(pbitmap,&VPage[(ptable+chr)>>10][ptable+chr],tileattr,0);
++					DrawTextHookerChr(pbitmap,(uint8*)&VPage[(ptable+chr)>>10][ptable+chr],tileattr,0);
+ 				}
+ 				//after updates have been made to tileToggles, reset pausedTileToggles
+ 				pausedTileToggles[x][y] = tileToggles[x][y];
+ 			} else { //we aren't paused, do a normal call
+-				DrawTextHookerChr(pbitmap,&VPage[(ptable+chr)>>10][ptable+chr],tileattr,tileToggles[x][y]);
++				DrawTextHookerChr(pbitmap,(uint8*)&VPage[(ptable+chr)>>10][ptable+chr],tileattr,tileToggles[x][y]);
+ 			}
+ 			pbitmap += (8*3);
+ 		}
+diff -ENwbur src/fceu.cpp src/fceu.cpp
+--- src/fceu.cpp	2018-06-20 11:40:06.419484700 +0500
++++ src/fceu.cpp	2018-06-20 10:49:20.286557700 +0500
+@@ -347,7 +347,7 @@
+ //windows might need to allocate these differently, so we have some special code
+ 
+ static void AllocBuffers() {
+-	RAM = (uint8*)FCEU_gmalloc(0x800);
++	RAM = (uint8*)FCEU_gmalloc(0x8000);
+ }
+ 
+ static void FreeBuffers() {
+@@ -363,7 +363,7 @@
+ }
+ 
+ static DECLFW(BRAMH) {
+-	RAM[A & 0x7FF] = V;
++	RAM[A & 0x7FFF] = V;
+ }
+ 
+ static DECLFR(ARAML) {
+@@ -371,7 +371,7 @@
+ }
+ 
+ static DECLFR(ARAMH) {
+-	return RAM[A & 0x7FF];
++	return RAM[A & 0x7FFF];
+ }
+ 
+ 
+@@ -382,6 +382,7 @@
+ 	PPU_hook = NULL;
+ 	GameHBIRQHook = NULL;
+ 	FFCEUX_PPURead = NULL;
++	nes128 = 0;
+ 	FFCEUX_PPUWrite = NULL;
+ 	if (GameExpSound.Kill)
+ 		GameExpSound.Kill();
+@@ -895,16 +896,16 @@
+ 
+ 	FCEU_GeniePower();
+ 
+-	FCEU_MemoryRand(RAM, 0x800);
++	FCEU_MemoryRand(RAM, 0x2000);
+ 
+ 	SetReadHandler(0x0000, 0xFFFF, ANull);
+ 	SetWriteHandler(0x0000, 0xFFFF, BNull);
+ 
+-	SetReadHandler(0, 0x7FF, ARAML);
+-	SetWriteHandler(0, 0x7FF, BRAML);
++	SetReadHandler(0, 0x7fff, ARAML);
++	SetWriteHandler(0, 0x7fff, BRAML);
+ 
+-	SetReadHandler(0x800, 0x1FFF, ARAMH);	// Part of a little
+-	SetWriteHandler(0x800, 0x1FFF, BRAMH);	//hack for a small speed boost.
++	SetReadHandler(0x7fff, 0x7FFF, ARAMH);	// Part of a little
++	SetWriteHandler(0x7fff, 0x7FFF, BRAMH);	//hack for a small speed boost.
+ 
+ 	InitializeInput();
+ 	FCEUSND_Power();
+diff -ENwbur src/fceu.h src/fceu.h
+--- src/fceu.h	2018-06-20 11:40:06.435109500 +0500
++++ src/fceu.h	2018-06-20 10:49:15.363821300 +0500
+@@ -2,8 +2,10 @@
+ #define _FCEUH
+ 
+ #include "types.h"
+-
++extern int nes128;
++extern int nesclock;
+ extern int fceuindbg;
++extern int vt03_mode;
+ extern int newppu;
+ void ResetGameLoaded(void);
+ 
+diff -ENwbur src/ines.cpp src/ines.cpp
+--- src/ines.cpp	2018-06-20 11:40:06.591359800 +0500
++++ src/ines.cpp	2018-06-20 10:51:24.328271700 +0500
+@@ -749,7 +749,11 @@
+ 		iNESCart.battery_vram_size = (head.VRAM_size & 0xF0)?(64 << ((head.VRAM_size & 0xF0)>>4)):0;
+ 		iNESCart.submapper = head.ROM_type3 >> 4;
+ 	}
+-
++	if ((head.VS_hardware & 1) == 1)nes128 = 1;
++	if (head.VS_hardware & 2)vt03_mode = 1;
++	else vt03_mode = 0;
++	nesclock = head.reserved[0] + head.reserved[1] + ((head.VS_hardware >> 4) * 240);
++	if (head.reserved[0] == 0xDD && head.reserved[1] == 0x0B)nesclock = 1760;
+ 	MapperNo = (head.ROM_type >> 4);
+ 	MapperNo |= (head.ROM_type2 & 0xF0);
+ 	if(iNES2) MapperNo |= ((head.ROM_type3 & 0x0F) << 8);
+@@ -905,7 +909,7 @@
+ 	} else if (strrchr(name, '\\')) {
+ 		name = strrchr(name, '\\') + 1;
+ 	}
+-
++	if (strstr(name, "128_spr") || strstr(name, "256_spr"))nes128 = 1;
+ 	GameInterface = iNESGI;
+ 	currCartInfo = &iNESCart;
+ 	FCEU_printf("\n");
+diff -ENwbur src/ops.inc src/ops.inc
+--- src/ops.inc	2018-06-20 11:40:06.794485800 +0500
++++ src/ops.inc	2018-06-20 10:54:45.527063100 +0500
+@@ -330,10 +330,10 @@
+ case 0x0B: LD_IM(AND;_P&=~C_FLAG;_P|=_A>>7);
+ 
+ /* AAX */
+-case 0x87: ST_ZP(_A&_X);
+-case 0x97: ST_ZPY(_A&_X);
+-case 0x8F: ST_AB(_A&_X);
+-case 0x83: ST_IX(_A&_X);
++case 0x87: ST_ZPZ(_A);
++case 0x97: ST_ABY(_Z);//ST_ZPY(_A&_X);
++case 0x8F: ST_ZPY(_Z);//ST_AB(_A&_X);
++case 0x83: ST_ZPX(_Z);//ST_IX(_A&_X);
+ 
+ /* ARR - ARGH, MATEY! */
+ case 0x6B: { 
+@@ -345,7 +345,7 @@
+ 
+ /* ATX(OAL) Is this(OR with $EE) correct? Blargg did some test
+    and found the constant to be OR with is $FF for NES */
+-case 0xAB: LD_IM(_A|=0xFF;AND;_X=_A);
++case 0xAB: LD_ZPX(LDZ); //LD_IM(_A|=0xFF;AND;_X=_A);
+ 
+ /* AXS */ 
+ case 0xCB: LD_IM(AXS);
+@@ -353,20 +353,24 @@
+ /* DCP */
+ case 0xC7: RMW_ZP(DEC;CMP);
+ case 0xD7: RMW_ZPX(DEC;CMP);
+-case 0xCF: RMW_AB(DEC;CMP);
+-case 0xDF: RMW_ABX(DEC;CMP);
+-case 0xDB: RMW_ABY(DEC;CMP);
+-case 0xC3: RMW_IX(DEC;CMP);
+-case 0xD3: RMW_IY(DEC;CMP);
++case 0xCF: RMW_ABZ(DEC);
++case 0xDF: LD_ABZ(ORA);//RMW_IX(DEC;CMP);
++case 0xDB: LD_ABZ(AND);//RMW_IX(DEC;CMP);
++case 0xC3: LD_ABZ(ADC);//RMW_IX(DEC;CMP);
++case 0xD3: LD_ABZ(SBC);//RMW_IX(DEC;CMP);
+ 
+ /* ISB */
+ case 0xE7: RMW_ZP(INC;SBC);
+ case 0xF7: RMW_ZPX(INC;SBC);
+-case 0xEF: RMW_AB(INC;SBC);
++case 0xEF: RMW_ABZ(INC);
+ case 0xFF: RMW_ABX(INC;SBC);
+-case 0xFB: RMW_ABY(INC;SBC);
++case 0xFB:  /* DEZ */
++           _Z--;
++           X_ZN(_Z);
++           break;
++		   //RMW_ABY(INC;SBC);
+ case 0xE3: RMW_IX(INC;SBC);
+-case 0xF3: RMW_IY(INC;SBC);
++case 0xF3: LD_IM(DVA); //RMW_IY(INC;SBC);
+ 
+ /* DOP */
+ 
+@@ -378,9 +382,9 @@
+ case 0x64: _PC++;break;
+ case 0x74: _PC++;break;
+ 
+-case 0x80: _PC++;break;
+-case 0x82: _PC++;break;
+-case 0x89: _PC++;break;
++case 0x80: PUSH(_Z);break;
++case 0x82: ST_ZP(_Z);//_PC++;break;
++case 0x89: ST_ZPZ(_X);//_PC++;break;
+ case 0xC2: _PC++;break;
+ case 0xD4: _PC++;break;
+ case 0xE2: _PC++;break;
+@@ -388,40 +392,50 @@
+ 
+ /* KIL */
+ 
+-case 0x02:
++case 0x02:  _Z=_A;
++           X_ZN(_A);
++           break;
+ case 0x12:
+-case 0x22:
+-case 0x32:
+-case 0x42:
+-case 0x52:
++			_A=_Z;
++           X_ZN(_A);
++           break;
++case 0x22: LD_AB(LDZ);
++case 0x32: LD_ABZ(LDX);
++case 0x42: LD_ZPZ(LDY);
++case 0x52: LD_ABZ(LDY);
+ case 0x62:
+ case 0x72:
+-case 0x92:
++case 0x92: ST_AB(_Z);
+ case 0xB2:
++			LD_ABX(LDZ);
+ case 0xD2:
+-case 0xF2:ADDCYC(0xFF);
+-          _jammed=1;
+-	  _PC--;
+-	  break;
++case 0xF2:
+ 
++			LD_IM(DMA);
+ /* LAR */
+-case 0xBB: RMW_ABY(_S&=x;_A=_X=_S;X_ZN(_X));
++case 0xBB: LD_ABZ(LDA);//RMW_ABY(_S&=x;_A=_X=_S;X_ZN(_X));
+ 
+ /* LAX */
+-case 0xA7: LD_ZP(LDA;LDX);
+-case 0xB7: LD_ZPY(LDA;LDX);
+-case 0xAF: LD_AB(LDA;LDX);
+-case 0xBF: LD_ABY(LDA;LDX);
+-case 0xA3: LD_IX(LDA;LDX);
+-case 0xB3: LD_IY(LDA;LDX);
++case 0xA7: LD_ZP(LDZ);//LD_ZP(LDA;LDX);
++case 0xB7: LD_ZPZ(LDA);//LD_ZPY(LDA;LDX);
++case 0xAF: LD_ZPY(LDZ);//LD_AB(LDA;LDX);
++case 0xBF: LD_ZPZ(LDX);//LD_ABY(LDA;LDX);
++case 0xA3: LD_IM(LDZ);//LD_IX(LDA;LDX);
++case 0xB3: LD_ABX(LDZ);//LD_IY(LDA;LDX);
+ 
+ /* NOP */
+ case 0x1A:
+ case 0x3A:
+ case 0x5A:
+-case 0x7A:
++case 0x7A: _Z=POP();
++           X_ZN(_Z);
++		   break;
+ case 0xDA:
+-case 0xFA: break;
++case 0xFA:  /* INZ */
++           _Z++;
++           X_ZN(_Z);
++           break; 
++
+ 
+ /* RLA */
+ case 0x27: RMW_ZP(ROL;AND);
+@@ -460,17 +474,17 @@
+ case 0x53: RMW_IY(LSR;EOR);
+ 
+ /* AXA - SHA */
+-case 0x93: ST_IY(_A&_X&(((A-_Y)>>8)+1));
++case 0x93: ST_ABX(_Z);//ST_IY(_A&_X&(((A-_Y)>>8)+1));
+ case 0x9F: ST_ABY(_A&_X&(((A-_Y)>>8)+1));
+ 
+ /* SYA */
+-case 0x9C: ST_ABX(_Y&(((A-_X)>>8)+1));
++case 0x9C: ST_ABZ(_X);//ST_ABX(_Y&(((A-_X)>>8)+1));
+ 
+ /* SXA */
+-case 0x9E: ST_ABY(_X&(((A-_Y)>>8)+1));
++case 0x9E: ST_ABZ(_Y);//ST_ABY(_X&(((A-_Y)>>8)+1));
+ 
+ /* XAS */
+-case 0x9B: _S=_A&_X;ST_ABY(_S& (((A-_Y)>>8)+1) );
++case 0x9B: ST_ABZ(_A);//_S=_A&_X;ST_ABY(_S& (((A-_Y)>>8)+1) );
+ 
+ /* TOP */
+ case 0x0C: LD_AB(;);
+@@ -482,5 +496,5 @@
+ case 0xFC: LD_ABX(;);
+ 
+ /* XAA - BIG QUESTION MARK HERE */
+-case 0x8B: _A|=0xEE; _A&=_X; LD_IM(AND);
++case 0x8B: ST_ZPZ(_Y);//_A|=0xEE; _A&=_X; LD_IM(AND);
+ //endif
+diff -ENwbur src/palette.cpp src/palette.cpp
+--- src/palette.cpp	2018-06-20 11:40:06.810109600 +0500
++++ src/palette.cpp	2018-06-20 10:55:17.143374600 +0500
+@@ -42,9 +42,9 @@
+ 
+ bool force_grayscale = false;
+ 
+-pal palette_game[64*8]; //custom palette for an individual game. (formerly palettei)
+-pal palette_user[64*8]; //user's overridden palette (formerly palettec)
+-pal palette_ntsc[64*8]; //mathematically generated NTSC palette (formerly paletten)
++pal palette_game[64*8*2]; //custom palette for an individual game. (formerly palettei)
++pal palette_user[64*8*2]; //user's overridden palette (formerly palettec)
++pal palette_ntsc[64*8*2]; //mathematically generated NTSC palette (formerly paletten)
+ 
+ static bool palette_game_available; //whether palette_game is available
+ static bool palette_user_available; //whether palette_user is available
+@@ -175,7 +175,7 @@
+ 
+ static void ApplyDeemphasisBisqwit(int entry, u8& r, u8& g, u8& b)
+ {
+-	if(entry<64) return;
++	if(entry<64*2) return;
+ 	int myr, myg, myb;
+ 	// The input value is a NES color index (with de-emphasis bits).
+ 	// We need RGB values. Convert the index into RGB.
+@@ -211,7 +211,7 @@
+ 			// De-emphasis bits attenuate a part of the signal:
+ 			if(pass==1)
+ 			{
+-				if(((entry & 0x40) && bisqwit_wave(p,12))
++				if(((entry & 0x80) && bisqwit_wave(p,12))
+ 					|| ((entry & 0x80) && bisqwit_wave(p, 4))
+ 					|| ((entry &0x100) && bisqwit_wave(p, 8))) spot *= attenuation;
+ 			}
+@@ -287,6 +287,12 @@
+ 			ApplyDeemphasisBisqwit(idx,pal512[idx].r,pal512[idx].g,pal512[idx].b);
+ 		}
+ 	}
++	int idx2;
++	for(int p=0;p<128;p++,idx2++)
++		{
++			pal512[idx2] = pal512[p];
++			ApplyDeemphasisBisqwit(idx2,pal512[idx2].r,pal512[idx2].g,pal512[idx2].b);
++		}
+ }
+ 
+ void FCEUI_SetUserPalette(uint8 *pal, int nEntries)
+@@ -314,13 +320,13 @@
+ 	FILE* fp = FCEUD_UTF8fopen(path,"rb");
+ 	if(fp)
+ 	{
+-		int readed = fread(palette_game,1,64*8*3,fp);
++		int readed = fread(palette_game,1,64*8*3*2,fp);
+ 		int nEntries = readed/3;
+ 		fclose(fp);
+ 
+ 		//if palette is incomplete, generate deemph entries
+-		if(nEntries != 512)
+-			ApplyDeemphasisComplete(palette_game);
++	//	if(nEntries != 512)
++	//		ApplyDeemphasisComplete(palette_game);
+ 
+ 		palette_game_available = true;
+ 	}
+@@ -391,7 +397,7 @@
+ 		g=rtmul[6];
+ 		b=rtmul[6];
+ 
+-		for(x=0;x<0x40;x++)
++		for(x=0;x<0x80;x++)
+ 		{
+ 			uint32 m,n,o;
+ 			m=palo[x].r;
+@@ -412,7 +418,7 @@
+ 	g=gtmul[d-1];
+ 	b=btmul[d-1];
+ 
+-	for(x=0;x<0x40;x++)
++	for(x=0;x<0x80;x++)
+ 	{
+ 		uint32 m,n,o;
+ 
+@@ -426,7 +432,7 @@
+ 		if(n>0xff) n=0xff;
+ 		if(o>0xff) o=0xff;
+ 
+-		FCEUD_SetPalette(x|0x40,m,n,o);
++		FCEUD_SetPalette(x|0x80,m,n,o);
+ 	}
+ 
+ 	lastd=d;
+@@ -519,7 +525,7 @@
+ 	{
+ 		palo = default_palette[default_palette_selection];
+ 		//need to calcualte a deemph on the fly.. sorry. maybe support otherwise later
+-		ApplyDeemphasisComplete(palo);
++//	ApplyDeemphasisComplete(palo);
+ 	}
+ }
+ 
+@@ -539,7 +545,7 @@
+ 		FCEUD_SetPalette(x,205,205,205);
+ 
+ 	//sets palette entries >= 128 with the 64 selected main colors
+-	for(x=0;x<64;x++)
++	for(x=0;x<64*2;x++)
+ 		FCEUD_SetPalette(128+x,palo[x].r,palo[x].g,palo[x].b);
+ 	SetNESDeemph_OldHacky(lastd,1);
+ 	#ifdef _S9XLUA_H
+diff -ENwbur src/palettes/palettes.h src/palettes/palettes.h
+--- src/palettes/palettes.h	2018-06-20 11:40:19.750123800 +0500
++++ src/palettes/palettes.h	2018-06-20 10:36:27.741303700 +0500
+@@ -2,7 +2,7 @@
+ #define EMPTY_PALETTE_4 EMPTY_PALETTE_1 EMPTY_PALETTE_1 EMPTY_PALETTE_1 EMPTY_PALETTE_1
+ #define EMPTY_PALETTE_16 EMPTY_PALETTE_4 EMPTY_PALETTE_4 EMPTY_PALETTE_4 EMPTY_PALETTE_4
+ #define EMPTY_PALETTE_64 EMPTY_PALETTE_16 EMPTY_PALETTE_16 EMPTY_PALETTE_16 EMPTY_PALETTE_16
+-#define EMPTY_PALETTE_DEEMPH_X_7 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64
++#define EMPTY_PALETTE_DEEMPH_X_7 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 EMPTY_PALETTE_64 //EMPTY_PALETTE_64
+ 
+ pal rp2c04001[512] = {
+  #include "rp2c04001.h"
+@@ -121,70 +121,70 @@
+         { 0x00<<2, 0x00<<2, 0x00<<2 }, /* Value 63 */
+ 
+ 		//luke's .16+ palette
+-        //{0x60, 0x60, 0x60}, /* Value 0 */
+-        //{0x00, 0x00, 0x70}, /* Value 1 */
+-        //{0x14, 0x00, 0x80}, /* Value 2 */
+-        //{0x2C, 0x00, 0x6E}, /* Value 3 */
+-        //{0x4A, 0x00, 0x4E}, /* Value 4 */
+-        //{0x6C, 0x00, 0x18}, /* Value 5 */
+-        //{0x5A, 0x03, 0x02}, /* Value 6 */
+-        //{0x51, 0x18, 0x00}, /* Value 7 */
+-        //{0x34, 0x24, 0x00}, /* Value 8 */
+-        //{0x00, 0x34, 0x00}, /* Value 9 */
+-        //{0x00, 0x32, 0x00}, /* Value 10 */
+-        //{0x00, 0x34, 0x20}, /* Value 11 */
+-        //{0x00, 0x2C, 0x78}, /* Value 12 */
+-        //{0x00, 0x00, 0x00}, /* Value 13 */
+-        //{0x02, 0x02, 0x02}, /* Value 14 */
+-        //{0x02, 0x02, 0x02}, /* Value 15 */
+-        //{0xC4, 0xC4, 0xC4}, /* Value 16 */
+-        //{0x00, 0x58, 0xDE}, /* Value 17 */
+-        //{0x30, 0x1F, 0xFC}, /* Value 18 */
+-        //{0x7F, 0x14, 0xE0}, /* Value 19 */
+-        //{0xA8, 0x00, 0xB0}, /* Value 20 */
+-        //{0xC0, 0x06, 0x5C}, /* Value 21 */
+-        //{0xC0, 0x2B, 0x0E}, /* Value 22 */
+-        //{0xA6, 0x40, 0x10}, /* Value 23 */
+-        //{0x6F, 0x61, 0x00}, /* Value 24 */
+-        //{0x30, 0x80, 0x00}, /* Value 25 */
+-        //{0x00, 0x7C, 0x00}, /* Value 26 */
+-        //{0x00, 0x7C, 0x3C}, /* Value 27 */
+-        //{0x00, 0x6E, 0x84}, /* Value 28 */
+-        //{0x14, 0x14, 0x14}, /* Value 29 */
+-        //{0x04, 0x04, 0x04}, /* Value 30 */
+-        //{0x04, 0x04, 0x04}, /* Value 31 */
+-        //{0xF0, 0xF0, 0xF0}, /* Value 32 */
+-        //{0x4C, 0xAA, 0xFF}, /* Value 33 */
+-        //{0x6F, 0x73, 0xF5}, /* Value 34 */
+-        //{0xB0, 0x70, 0xFF}, /* Value 35 */
+-        //{0xDA, 0x5A, 0xFF}, /* Value 36 */
+-        //{0xF0, 0x60, 0xC0}, /* Value 37 */
+-        //{0xF8, 0x83, 0x6D}, /* Value 38 */
+-        //{0xD0, 0x90, 0x30}, /* Value 39 */
+-        //{0xD4, 0xC0, 0x30}, /* Value 40 */
+-        //{0x66, 0xD0, 0x00}, /* Value 41 */
+-        //{0x26, 0xDD, 0x1A}, /* Value 42 */
+-        //{0x2E, 0xC8, 0x66}, /* Value 43 */
+-        //{0x34, 0xC2, 0xBE}, /* Value 44 */
+-        //{0x54, 0x54, 0x54}, /* Value 45 */
+-        //{0x06, 0x06, 0x06}, /* Value 46 */
+-        //{0x06, 0x06, 0x06}, /* Value 47 */
+-        //{0xFF, 0xFF, 0xFF}, /* Value 48 */
+-        //{0xB6, 0xDA, 0xFF}, /* Value 49 */
+-        //{0xC8, 0xCA, 0xFF}, /* Value 50 */
+-        //{0xDA, 0xC2, 0xFF}, /* Value 51 */
+-        //{0xF0, 0xBE, 0xFF}, /* Value 52 */
+-        //{0xFC, 0xBC, 0xEE}, /* Value 53 */
+-        //{0xFF, 0xD0, 0xB4}, /* Value 54 */
+-        //{0xFF, 0xDA, 0x90}, /* Value 55 */
+-        //{0xEC, 0xEC, 0x92}, /* Value 56 */
+-        //{0xDC, 0xF6, 0x9E}, /* Value 57 */
+-        //{0xB8, 0xFF, 0xA2}, /* Value 58 */
+-        //{0xAE, 0xEA, 0xBE}, /* Value 59 */
+-        //{0x9E, 0xEF, 0xEF}, /* Value 60 */
+-        //{0xBE, 0xBE, 0xBE}, /* Value 61 */
+-        //{0x08, 0x08, 0x08}, /* Value 62 */
+-        //{0x08, 0x08, 0x08}, /* Value 63 */
++       {0x60, 0x60, 0x60}, /* Value 0 */
++       {0xFF, 0x00, 0x00}, /* Value 1 */
++       {0x14, 0x00, 0x80}, /* Value 2 */
++       {0x2C, 0x00, 0x6E}, /* Value 3 */
++       {0x4A, 0x00, 0x4E}, /* Value 4 */
++       {0x6C, 0x00, 0x18}, /* Value 5 */
++       {0x5A, 0x03, 0x02}, /* Value 6 */
++       {0x51, 0x18, 0x00}, /* Value 7 */
++       {0x34, 0x24, 0x00}, /* Value 8 */
++       {0x00, 0x34, 0x00}, /* Value 9 */
++       {0x00, 0x32, 0x00}, /* Value 10 */
++       {0x00, 0x34, 0x20}, /* Value 11 */
++       {0x00, 0x2C, 0x78}, /* Value 12 */
++       {0x00, 0x00, 0x00}, /* Value 13 */
++       {0x02, 0x02, 0x02}, /* Value 14 */
++       {0x02, 0x02, 0x02}, /* Value 15 */
++       {0xC4, 0xC4, 0xC4}, /* Value 16 */
++       {0x00, 0x58, 0xDE}, /* Value 17 */
++       {0x30, 0x1F, 0xFC}, /* Value 18 */
++       {0x7F, 0x14, 0xE0}, /* Value 19 */
++       {0xA8, 0x00, 0xB0}, /* Value 20 */
++       {0xC0, 0x06, 0x5C}, /* Value 21 */
++       {0xC0, 0x2B, 0x0E}, /* Value 22 */
++       {0xA6, 0x40, 0x10}, /* Value 23 */
++       {0x6F, 0x61, 0x00}, /* Value 24 */
++       {0x30, 0x80, 0x00}, /* Value 25 */
++       {0x00, 0x7C, 0x00}, /* Value 26 */
++       {0x00, 0x7C, 0x3C}, /* Value 27 */
++       {0x00, 0x6E, 0x84}, /* Value 28 */
++       {0x14, 0x14, 0x14}, /* Value 29 */
++       {0x04, 0x04, 0x04}, /* Value 30 */
++       {0x04, 0x04, 0x04}, /* Value 31 */
++       {0xF0, 0xF0, 0xF0}, /* Value 32 */
++       {0x4C, 0xAA, 0xFF}, /* Value 33 */
++       {0x6F, 0x73, 0xF5}, /* Value 34 */
++       {0xB0, 0x70, 0xFF}, /* Value 35 */
++       {0xDA, 0x5A, 0xFF}, /* Value 36 */
++       {0xF0, 0x60, 0xC0}, /* Value 37 */
++       {0xF8, 0x83, 0x6D}, /* Value 38 */
++       {0xD0, 0x90, 0x30}, /* Value 39 */
++       {0xD4, 0xC0, 0x30}, /* Value 40 */
++       {0x66, 0xD0, 0x00}, /* Value 41 */
++       {0x26, 0xDD, 0x1A}, /* Value 42 */
++       {0x2E, 0xC8, 0x66}, /* Value 43 */
++       {0x34, 0xC2, 0xBE}, /* Value 44 */
++       {0x54, 0x54, 0x54}, /* Value 45 */
++       {0x06, 0x06, 0x06}, /* Value 46 */
++       {0x06, 0x06, 0x06}, /* Value 47 */
++       {0xFF, 0xFF, 0xFF}, /* Value 48 */
++       {0xB6, 0xDA, 0xFF}, /* Value 49 */
++       {0xC8, 0xCA, 0xFF}, /* Value 50 */
++       {0xDA, 0xC2, 0xFF}, /* Value 51 */
++       {0xF0, 0xBE, 0xFF}, /* Value 52 */
++       {0xFC, 0xBC, 0xEE}, /* Value 53 */
++       {0xFF, 0xD0, 0xB4}, /* Value 54 */
++       {0xFF, 0xDA, 0x90}, /* Value 55 */
++       {0xEC, 0xEC, 0x92}, /* Value 56 */
++       {0xDC, 0xF6, 0x9E}, /* Value 57 */
++       {0xB8, 0xFF, 0xA2}, /* Value 58 */
++       {0xAE, 0xEA, 0xBE}, /* Value 59 */
++       {0x9E, 0xEF, 0xEF}, /* Value 60 */
++       {0xBE, 0xBE, 0xBE}, /* Value 61 */
++       {0x08, 0x08, 0x08}, /* Value 62 */
++       {0x08, 0x08, 0x08}, /* Value 63 */
+ /*
+ // old palette:
+ 74, 74, 74
+diff -ENwbur src/ppu.cpp src/ppu.cpp
+--- src/ppu.cpp	2018-06-20 11:40:06.841361200 +0500
++++ src/ppu.cpp	2018-06-20 11:39:08.966442300 +0500
+@@ -14,11 +14,14 @@
+  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  * GNU General Public License for more details.
+  *
+- * You should have received a copy of the GNU General Public License
++ * You should have received a copy of the GNU General Public Licenseа
+  * along with this program; if not, write to the Free Software
+  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+  */
++int nes128;
++int nesclock;
+ 
++int abcde;
+ #include "types.h"
+ #include "x6502.h"
+ #include "fceu.h"
+@@ -28,7 +31,7 @@
+ #include "file.h"
+ #include "utils/endian.h"
+ #include "utils/memory.h"
+-		 
++int vt03_mode;
+ #include "cart.h"
+ #include "palette.h"
+ #include "state.h"
+@@ -66,12 +69,18 @@
+ static void CopySprites(uint8 *target);
+ 
+ static void Fixit1(void);
++static void Fixit12(void);
+ static uint32 ppulut1[256];
+ static uint32 ppulut2[256];
+ static uint32 ppulut3[128];
+-
++static uint32 ppulut4[256];
++static uint32 ppulut5[256];
++uint8 extra_ppu[0x10000];
++//uint8 extra_ppu2[0x2000];
+ static bool new_ppu_reset = false;
+-
++int ex40 = 0x40;
++int ex3f = 0x3f;
++int ex40404040 = 0x80808080;
+ int test = 0;
+ 
+ template<typename T, int BITS>
+@@ -289,11 +298,6 @@
+ 
+ int newppu_get_scanline() { return ppur.status.sl; }
+ int newppu_get_dot() { return ppur.status.cycle; }
+-void newppu_hacky_emergency_reset()
+-{
+-	if(ppur.status.end_cycle == 0)
+-		ppur.reset();
+-}
+ 
+ static void makeppulut(void) {
+ 	int x;
+@@ -306,8 +310,12 @@
+ 		for (y = 0; y < 8; y++)
+ 			ppulut1[x] |= ((x >> (7 - y)) & 1) << (y * 4);
+ 		ppulut2[x] = ppulut1[x] << 1;
++		ppulut4[x] = ppulut1[x] << 2;
++		ppulut5[x] = ppulut1[x] << 3;
+ 	}
+ 
++
++
+ 	for (cc = 0; cc < 16; cc++) {
+ 		for (xo = 0; xo < 8; xo++) {
+ 			ppulut3[xo | (cc << 3)] = 0;
+@@ -342,8 +350,9 @@
+ 
+ uint8 VRAMBuffer = 0, PPUGenLatch = 0;
+ uint8 *vnapage[4];
++uint8 *vnapage2[4];
+ uint8 PPUNTARAM = 0;
+-uint8 PPUCHRRAM = 0;
++int PPUCHRRAM = 0;
+ 
+ //Color deemphasis emulation.  Joy...
+ static uint8 deemp = 0;
+@@ -354,26 +363,40 @@
+ 
+ uint8 vtoggle = 0;
+ uint8 XOffset = 0;
++uint8 XOffset2 = 0;
+ uint8 SpriteDMA = 0; // $4014 / Writing $xx copies 256 bytes by reading from $xx00-$xxFF and writing to $2004 (OAM data)
+ 
+ uint32 TempAddr = 0, RefreshAddr = 0, DummyRead = 0, NTRefreshAddr = 0;
+-
+-static int maxsprites = 8;
++uint32 TempAddr2 = 32, RefreshAddr2 = 32;
++static int maxsprites = 256;
+ 
+ //scanline is equal to the current visible scanline we're on.
+ int scanline;
+ int g_rasterpos;
+ static uint32 scanlines_per_frame;
++typedef struct {
++	uint8 y, no, atr, x;
++} SPR;
+ 
+-uint8 PPU[4];
+-uint8 PPUSPL;
+-uint8 NTARAM[0x800], PALRAM[0x20], SPRAM[0x100], SPRBUF[0x100];
++typedef struct {
++	uint8 ca[8];
++     uint8 atr, x;
++} SPRB;
++int PPU[4];
++int PPUSPL;
++uint8 PALRAM[0x100], SPRAM[0x400];
++uint8 NTARAM[0x800];
++uint8 NTARAM2[0x800];
++static SPRB SPRBUF[0x400];
+ uint8 UPALRAM[0x03];//for 0x4/0x8/0xC addresses in palette, the ones in
+ 					//0x20 are 0 to not break fceu rendering.
+ 
+ #define MMC5SPRVRAMADR(V)   &MMC5SPRVPage[(V) >> 10][(V)]
+ #define VRAMADR(V)          &VPage[(V) >> 10][(V)]
+ 
++//mbg 8/6/08 - fix a bug relating to
++//"When in 8x8 sprite mode, only one set is used for both BG and sprites."
++//in mmc5 docs
+ uint8* MMC5BGVRAMADR(uint32 A);
+ 
+ //this duplicates logic which is embedded in the ppu rendering code
+@@ -384,7 +407,7 @@
+ 	if (MMC5Hack) {
+ 		if (MMC5HackCHRMode == 1) {
+ 			uint8 *C = MMC5HackVROMPTR;
+-			C += (((MMC5HackExNTARAMPtr[refreshaddr & 0x3ff]) & 0x3f & MMC5HackVROMMask) << 12) + (vadr & 0xfff);
++			C += (((MMC5HackExNTARAMPtr[refreshaddr & 0x3ff]) & 0x7F & MMC5HackVROMMask) << 12) + (vadr & 0xfff);
+ 			C += (MMC50x5130 & 0x3) << 18;	//11-jun-2009 for kuja_killer
+ 			return C;
+ 		} else {
+@@ -406,24 +429,39 @@
+ 
+ //new ppu-----
+ inline void FFCEUX_PPUWrite_Default(uint32 A, uint8 V) {
+-	uint32 tmp = A;
++	uint32 tmp = A & 0xffff;
+ 
+ 	if (PPU_hook) PPU_hook(A);
+ 
+-	if (tmp < 0x2000) {
+-		if (PPUCHRRAM & (1 << (tmp >> 10)))
+-			VPage[tmp >> 10][tmp] = V;
++	if (tmp < 0x2000 || (tmp > 0x3fff)) {
++		//if (PPUCHRRAM & (1 << (tmp >> 10)))
++			if(tmp<0x4000)VPage[tmp >> 10][tmp] = V;
++			else extra_ppu[tmp]= V;
+ 	} else if (tmp < 0x3F00) {
+ 		if (PPUNTARAM & (1 << ((tmp & 0xF00) >> 10)))
+ 			vnapage[((tmp & 0xF00) >> 10)][tmp & 0x3FF] = V;
+ 	} else {
+-		if (!(tmp & 3)) {
++		tmp &= 0xffff;
++	if(vt03_mode){
++			if (!(tmp & 0xF)) {
++			if (!(tmp & 0x30))
++				PALRAM[0x00] = PALRAM[0x10] = PALRAM[0x20] = PALRAM[0x30] = V & 0x7f;
++			else
++				UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x7f;
++		} else
++			PALRAM[tmp & 0xfF] = V & 0x7f;
++	}
++	else
++	{
++
++		if (!(tmp & 0x3)) {
+ 			if (!(tmp & 0xC))
+-				PALRAM[0x00] = PALRAM[0x04] = PALRAM[0x08] = PALRAM[0x0C] = V & 0x3F;
++				PALRAM[0x00] = PALRAM[0x4] = PALRAM[0x8] = PALRAM[0xC] = V & 0x7f;
+ 			else
+-				UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x3F;
++				UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x7f;
+ 		} else
+-			PALRAM[tmp & 0x1F] = V & 0x3F;
++			PALRAM[tmp & 0xfF] = V & 0x7f;
++	}
+ 	}
+ }
+ 
+@@ -434,22 +472,11 @@
+ int GetCHRAddress(int A) {
+ 	if (cdloggerVideoDataSize) {
+ 		int result = &VPage[A >> 10][A] - CHRptr[0];
++		if(A>0x4000)result = &extra_ppu[A] - CHRptr[0];
+ 		if ((result >= 0) && (result < (int)cdloggerVideoDataSize))
+ 			return result;
+ 	} else
+-		if(A < 0x2000) return A;
+-	return -1;
+-}
+-
+-int GetCHROffset(uint8 *ptr) {
+-	int result = ptr - CHRptr[0];
+-	if (cdloggerVideoDataSize) {
+-		if ((result >= 0) && (result < (int)cdloggerVideoDataSize))
+-			return result;
+-	} else {
+-		if ((result >= 0) && (result < 0x2000))
+-			return result;
+-	}
++		if(A < 0x2000 || A > 0x3FFF) return A;
+ 	return -1;
+ }
+ 
+@@ -471,42 +498,27 @@
+ 		} \
+ }
+ 
+-#define RENDER_LOGP(tmp) { \
+-		if (debug_loggingCD) \
+-		{ \
+-			int addr = GetCHROffset(tmp); \
+-			if (addr != -1)	\
+-			{ \
+-				if (!(cdloggervdata[addr] & 1))	\
+-				{ \
+-					cdloggervdata[addr] |= 1; \
+-					if(cdloggerVideoDataSize) { \
+-						if (!(cdloggervdata[addr] & 2)) undefinedvromcount--; \
+-						rendercount++; \
+-					} \
+-				} \
+-			} \
+-		} \
+-}
+-
+ uint8 FASTCALL FFCEUX_PPURead_Default(uint32 A) {
+ 	uint32 tmp = A;
+ 
+ 	if (PPU_hook) PPU_hook(A);
+ 
+-	if (tmp < 0x2000) {
++	if (tmp < 0x2000 || (tmp > 0x3fff)) {
++		if(tmp<0x4000)
+ 		return VPage[tmp >> 10][tmp];
++		else extra_ppu[tmp];
+ 	} else if (tmp < 0x3F00) {
+ 		return vnapage[(tmp >> 10) & 0x3][tmp & 0x3FF];
+ 	} else {
+ 		uint8 ret;
+-		if (!(tmp & 3)) {
++		tmp &= 0xffff;
++		if (!(tmp & 0xF)) {
+ 			if (!(tmp & 0xC))
+ 				ret = READPAL(0x00);
+ 			else
+ 				ret = READUPAL(((tmp & 0xC) >> 2) - 1);
+ 		} else
+-			ret = READPAL(tmp & 0x1F);
++			ret = READPAL(tmp & 0xfF);
+ 		return ret;
+ 	}
+ }
+@@ -519,10 +531,10 @@
+ 
+ #define CALL_PPUWRITE(A, V) (FFCEUX_PPUWrite ? FFCEUX_PPUWrite(A, V) : FFCEUX_PPUWrite_Default(A, V))
+ 
+-//whether to use the new ppu
++//whether to use the new ppu (new PPU doesn't handle MMC5 extra nametables at all
+ int newppu = 0;
+ 
+-void ppu_getScroll(int &xpos, int &ypos) {
++void ppu_getScroll(int &xpos, int &ypos) {   //TODOD: сделать копию функции, для второго nametable viewer
+ 	if (newppu) {
+ 		ypos = ppur._vt * 8 + ppur._fv + ppur._v * 256;
+ 		xpos = ppur._ht * 8 + ppur.fh + ppur._h * 256;
+@@ -697,7 +709,7 @@
+ 
+ static DECLFR(A2007) {
+ 	uint8 ret;
+-	uint32 tmp = RefreshAddr & 0x3FFF;
++	uint32 tmp = RefreshAddr &0xffff;
+ 
+ 	if (debug_loggingCD) {
+ 		if (!DummyRead && (LogAddress != -1)) {
+@@ -710,9 +722,10 @@
+ 			DummyRead = 0;
+ 	}
+ 
+-	if (newppu) {
++	if (newppu) 
++	{
+ 		ret = VRAMBuffer;
+-		RefreshAddr = ppur.get_2007access() & 0x3FFF;
++		RefreshAddr = ppur.get_2007access() &0xffff;
+ 		if ((RefreshAddr & 0x3F00) == 0x3F00) {
+ 			//if it is in the palette range bypass the
+ 			//delayed read, and what gets filled in the temp
+@@ -725,10 +738,10 @@
+ 				else
+ 					ret = READUPAL(((tmp & 0xC) >> 2) - 1);
+ 			} else
+-				ret = READPAL(tmp & 0x1F);
++				ret = READPAL(tmp & 0xfF);
+ 			VRAMBuffer = CALL_PPUREAD(RefreshAddr - 0x1000);
+ 		} else {
+-			if (debug_loggingCD && (RefreshAddr < 0x2000))
++			if (debug_loggingCD && (RefreshAddr < 0x2000 || RefreshAddr > 0x3fff))
+ 				LogAddress = GetCHRAddress(RefreshAddr);
+ 			VRAMBuffer = CALL_PPUREAD(RefreshAddr);
+ 		}
+@@ -736,29 +749,31 @@
+ 		RefreshAddr = ppur.get_2007access();
+ 		return ret;
+ 	} else {
+-
+-		//OLDPPU
+ 		FCEUPPU_LineUpdate();
+ 
+-		if (tmp >= 0x3F00) {	// Palette RAM tied directly to the output data, without VRAM buffer
+-			if (!(tmp & 3)) {
++		if (tmp >= 0x3F00 && tmp <= 0x3FFF) {	// Palette RAM tied directly to the output data, without VRAM buffer
++			if (!(tmp & 0xF)) {
+ 				if (!(tmp & 0xC))
+ 					ret = READPAL(0x00);
+ 				else
+ 					ret = READUPAL(((tmp & 0xC) >> 2) - 1);
+ 			} else
+-				ret = READPAL(tmp & 0x1F);
++				ret = READPAL(tmp & 0xfF);
+ 			#ifdef FCEUDEF_DEBUGGER
+ 			if (!fceuindbg)
+ 			#endif
+ 			{
+-				if ((tmp - 0x1000) < 0x2000)
+-					VRAMBuffer = VPage[(tmp - 0x1000) >> 10][tmp - 0x1000];
++				if ((tmp - 0x1000) < 0x2000 || (tmp - 0x1000)>0x3fff)
++				{
++					if(tmp<0x4000)VRAMBuffer = VPage[(tmp - 0x1000) >> 10][tmp - 0x1000];
++					else VRAMBuffer =extra_ppu[tmp-0x1000];
++				}
+ 				else
+ 					VRAMBuffer = vnapage[((tmp - 0x1000) >> 10) & 0x3][(tmp - 0x1000) & 0x3FF];
+ 				if (PPU_hook) PPU_hook(tmp);
+ 			}
+ 		} else {
++			uint32 tmp2 = RefreshAddr &0xffff;
+ 			ret = VRAMBuffer;
+ 			#ifdef FCEUDEF_DEBUGGER
+ 			if (!fceuindbg)
+@@ -766,17 +781,20 @@
+ 			{
+ 				if (PPU_hook) PPU_hook(tmp);
+ 				PPUGenLatch = VRAMBuffer;
+-				if (tmp < 0x2000) {
+-
++				if (tmp < 0x2000 || tmp > 0x7fff) {
+ 					if (debug_loggingCD)
+ 						LogAddress = GetCHRAddress(tmp);
+-					if(MMC5Hack && newppu)
+-						VRAMBuffer = *MMC5BGVRAMADR(tmp);
+-					else
+-						VRAMBuffer = VPage[tmp >> 10][tmp];
+-
++					if(tmp<0x4000)VRAMBuffer = VPage[tmp >> 10][tmp];
++					else VRAMBuffer = extra_ppu[tmp];
+ 				} else if (tmp < 0x3F00)
+ 					VRAMBuffer = vnapage[(tmp >> 10) & 0x3][tmp & 0x3FF];
++				//if (PPU_hook) PPU_hook(tmp2);
++				//PPUGenLatch = VRAMBuffer;            
++				//if (tmp2 > 0x3fff) {
++				//	if (debug_loggingCD)
++				//		LogAddress = GetCHRAddress(tmp2);
++				//	VRAMBuffer = VPage[tmp2 >> 10][tmp2];
++				//}
+ 			}
+ 		}
+ 
+@@ -803,7 +821,7 @@
+ 				else
+ 					RefreshAddr++;
+ 			}
+-			if (PPU_hook) PPU_hook(RefreshAddr & 0x3fff);
++			if (PPU_hook) PPU_hook(RefreshAddr &0xffff);
+ 		}
+ 		return ret;
+ 	}
+@@ -819,7 +837,8 @@
+ 	PPU[0] = V;
+ 	TempAddr &= 0xF3FF;
+ 	TempAddr |= (V & 3) << 10;
+-
++	TempAddr2 &= 0xF3FF;
++	TempAddr2 |= (V & 3) << 10;
+ 	ppur._h = V & 1;
+ 	ppur._v = (V >> 1) & 1;
+ 	ppur.s = (V >> 4) & 1;
+@@ -864,16 +883,23 @@
+ 		}
+ 		PPU[3]++;
+ 		PPUSPL++;
++		if (nes128 == 1) { if (PPU[3] == 0x400)PPU[3] = 0; }
++		if (nes128 == 0) { if (PPU[3] == 0x100)PPU[3] = 0; }
++		if (nes128 == 1) { if (PPUSPL == 0x400)PPUSPL = 0; }
++		if (nes128 == 0) { if (PPUSPL == 0x100)PPUSPL = 0; }
+ 	}
+ }
+ 
+ static DECLFW(B2005) {
+ 	uint32 tmp = TempAddr;
++	uint32 tmp2 = TempAddr2;
+ 	FCEUPPU_LineUpdate();
+ 	PPUGenLatch = V;
+ 	if (!vtoggle) {
+ 		tmp &= 0xFFE0;
+ 		tmp |= V >> 3;
++		tmp2 &= 0xFFE0;
++		tmp2 |= V >> 3;
+ 		XOffset = V & 7;
+ 		ppur._ht = V >> 3;
+ 		ppur.fh = V & 7;
+@@ -881,21 +907,90 @@
+ 		tmp &= 0x8C1F;
+ 		tmp |= ((V & ~0x7) << 2);
+ 		tmp |= (V & 7) << 12;
++		tmp2 &= 0x8C1F;
++		tmp2 |= ((V & ~0x7) << 2);
++		tmp2 |= (V & 7) << 12;
+ 		ppur._vt = V >> 3;
+ 		ppur._fv = V & 7;
+ 	}
+ 	TempAddr = tmp;
++	//TempAddr2 = 0;
++	vtoggle ^= 1;
++}
++static DECLFW(B3007) {
++	uint32 tmp = RefreshAddr2;
++	//FCEUPPU_LineUpdate();
++	PPUGenLatch = V;
++	if(tmp<0x2000 || tmp>0x4000)extra_ppu[tmp+0xE000] = V;
++	else vnapage2[((tmp & 0xF00) >> 10)][tmp & 0x3FF] = V;
++	
++	
++	if (INC32)
++			RefreshAddr2 += 32;
++	else
++			RefreshAddr2++;
++	//RefreshAddr2 &= 0x3fff;
++	if (PPU_hook)
++			PPU_hook(RefreshAddr2 &0xffff);
++}
++static DECLFW(B3005) {
++	uint32 tmp = TempAddr2;
++	FCEUPPU_LineUpdate();
++	PPUGenLatch = V;
++	if (!vtoggle) {
++		tmp &= 0xFFE0;
++		tmp |= V >> 3;
++		XOffset2 = V & 7;
++		ppur._ht = V >> 3;
++		ppur.fh = V & 7;
++	} else {
++		tmp &= 0x8C1F;
++		tmp |= ((V & ~0x7) << 2);
++		tmp |= (V & 7) << 12;
++		ppur._vt = V >> 3;
++		ppur._fv = V & 7;
++	}
++	TempAddr2 = tmp;
+ 	vtoggle ^= 1;
+ }
++static DECLFW(B3006) {
++	FCEUPPU_LineUpdate();
++
++	PPUGenLatch = V;
++	if (!vtoggle) {
++		TempAddr2 &= 0x00FF;
++		TempAddr2 |= (V & 0xFF) << 8;
++
++		ppur._vt &= 0x07;
++		ppur._vt |= (V & 0x3) << 3;
++		ppur._h = (V >> 2) & 1;
++		ppur._v = (V >> 3) & 1;
++		ppur._fv = (V >> 4) & 3;
++	} else {
++		TempAddr2 &= 0xFF00;
++		TempAddr2 |= V;
++
++		RefreshAddr2 = TempAddr2;
++		DummyRead = 1;
++		if (PPU_hook)
++			PPU_hook(RefreshAddr2);
+ 
++		ppur._vt &= 0x18;
++		ppur._vt |= (V >> 5);
++		ppur._ht = V & 31;
+ 
++		ppur.install_latches();
++	}
++
++	vtoggle ^= 1;
++}
+ static DECLFW(B2006) {
+ 	FCEUPPU_LineUpdate();
+ 
+ 	PPUGenLatch = V;
+ 	if (!vtoggle) {
+ 		TempAddr &= 0x00FF;
+-		TempAddr |= (V & 0x3f) << 8;
++		TempAddr |= (V & 0xFF) << 8;
+ 
+ 		ppur._vt &= 0x07;
+ 		ppur._vt |= (V & 0x3) << 3;
+@@ -922,51 +1017,89 @@
+ }
+ 
+ static DECLFW(B2007) {
+-	uint32 tmp = RefreshAddr & 0x3FFF;
++	uint32 tmp = RefreshAddr &0xffff;
++	//uint32 tmp2 = RefreshAddr &0xffff;
+ 
+ 	if (debug_loggingCD) {
+-		if(!cdloggerVideoDataSize && (tmp < 0x2000))
++		if(!cdloggerVideoDataSize && (tmp < 0x2000 || tmp >0x3fff))
+ 			cdloggervdata[tmp] = 0;
+ 	}
+ 
+ 	if (newppu) {
+ 		PPUGenLatch = V;
+-		RefreshAddr = ppur.get_2007access() & 0x3FFF;
++		RefreshAddr = ppur.get_2007access() &0xffff;
+ 		CALL_PPUWRITE(RefreshAddr, V);
+ 		ppur.increment2007(ppur.status.sl >= 0 && ppur.status.sl < 241 && PPUON, INC32 != 0);
+ 		RefreshAddr = ppur.get_2007access();
+ 	} else {
+ 		PPUGenLatch = V;
+-		if (tmp < 0x2000) {
+-			if (PPUCHRRAM & (1 << (tmp >> 10)))
+-				VPage[tmp >> 10][tmp] = V;
++//		if (tmp2 > 0x3fff)VPage[tmp2 >> 10][tmp2] = V;
++//		if(tmp> 0x3fff)VPage[tmp >> 10][tmp] = V;
++		if (tmp < 0x2000 || (tmp > 0x3fff)) {
++		//	if (PPUCHRRAM & (1 << (tmp >> 10)))
++
++				if(tmp<0x4000)VPage[tmp >> 10][tmp] = V;
++				else extra_ppu[tmp]=V;
++
+ 		} else if (tmp < 0x3F00) {
+ 			if (PPUNTARAM & (1 << ((tmp & 0xF00) >> 10)))
+ 				vnapage[((tmp & 0xF00) >> 10)][tmp & 0x3FF] = V;
+-		} else {
+-			if (!(tmp & 3)) {
+-				if (!(tmp & 0xC))
+-					PALRAM[0x00] = PALRAM[0x04] = PALRAM[0x08] = PALRAM[0x0C] = V & 0x3F;
++		} else if(tmp<0x4000) {
++			
++			
++			tmp &= 0xffff;
++			if(!V) V = 0x2d;
++			if(vt03_mode)
++			{
++			if (!(tmp & 0xF)) {
++				if (!(tmp & 0x30))
++					PALRAM[0x00] = PALRAM[0x10] = PALRAM[0x20] = PALRAM[0x30] = V & 0x7f;
++				else
++					UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x7f;
++			} else
++				PALRAM[tmp & 0xfF] = V & 0x7f;
++			}
++			else
++			{
++			if (!(tmp & 0x3)) {
++				if (!(tmp & 0x0C))
++					PALRAM[0x00] = PALRAM[0x4] = PALRAM[0x8] = PALRAM[0xC] = V & 0x7f;
+ 				else
+-					UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x3F;
++					UPALRAM[((tmp & 0xC) >> 2) - 1] = V & 0x7f;
+ 			} else
+-				PALRAM[tmp & 0x1F] = V & 0x3F;
++				PALRAM[tmp & 0xfF] = V & 0x7f;
+ 		}
++		}
++		//if (tmp2 > 0x3fff) {
++		////	if (PPUCHRRAM & (1 << (tmp2 >> 10)))
++		//		VPage[tmp2 >> 10][tmp2] = V;
++		//}
+ 		if (INC32)
+ 			RefreshAddr += 32;
+ 		else
+ 			RefreshAddr++;
+ 		if (PPU_hook)
+-			PPU_hook(RefreshAddr & 0x3fff);
++			PPU_hook(RefreshAddr &0xffff);
++		//if (PPU_hook && tmp2 > 0x3fff)
++		//	PPU_hook(RefreshAddr & 0x4fff);
+ 	}
+ }
++static DECLFW(B401C) {
+ 
++	abcde = V;
++}
+ static DECLFW(B4014) {
+ 	uint32 t = V << 8;
+ 	int x;
+ 
++	if (nes128 == 1) {
++		for (x = 0;x<1024;x++)
++			X6502_DMW(0x2004, X6502_DMR(t + x));
++	}
++	else {
+ 	for (x = 0; x < 256; x++)
+ 		X6502_DMW(0x2004, X6502_DMR(t + x));
++	}
+ 	SpriteDMA = V;
+ }
+ 
+@@ -981,18 +1114,22 @@
+ 
+ static void ResetRL(uint8 *target) {
+ 	memset(target, 0xFF, 256);
++//	for(int x = 0; x<256; x++)
++//		{xbb[(scanline<<8)+x] = 0xFF; }
+ 	InputScanlineHook(0, 0, 0, 0);
+ 	Plinef = target;
+ 	Pline = target;
++	//Pline2 = xbb;
+ 	firsttile = 0;
+ 	linestartts = timestamp * 48 + X.count;
+ 	tofix = 0;
+ 	FCEUPPU_LineUpdate();
+ 	tofix = 1;
++	//FCEUPPU_LineUpdate2();
+ }
+ 
+ static uint8 sprlinebuf[256 + 8];
+-
++static uint8 sprlinebuf2[256 + 8];
+ void FCEUPPU_LineUpdate(void) {
+ 	if (newppu)
+ 		return;
+@@ -1000,9 +1137,11 @@
+ #ifdef FCEUDEF_DEBUGGER
+ 	if (!fceuindbg)
+ #endif
+-	if (Pline) {
++	if (Pline) 
++	{
+ 		int l = GETLASTPIXEL;
+ 		RefreshLine(l);
++	
+ 	}
+ }
+ 
+@@ -1023,7 +1162,11 @@
+ static void EndRL(void) {
+ 	RefreshLine(272);
+ 	if (tofix)
++	{
+ 		Fixit1();
++		Fixit12();
++	}
++	
+ 	CheckSpriteHit(272);
+ 	Pline = 0;
+ }
+@@ -1038,7 +1181,7 @@
+ 	if (sphitx == 0x100) return;
+ 
+ 	for (x = sphitx; x < (sphitx + 8) && x < l; x++) {
+-		if ((sphitdata & (0x80 >> (x - sphitx))) && !(Plinef[x] & 64) && x < 255) {
++		if ((sphitdata & (0x80 >> (x - sphitx))) && !(Plinef[x] & 128) && x < 255) {
+ 			PPU_status |= 0x40;
+ 			sphitx = 0x100;
+ 			break;
+@@ -1052,15 +1195,19 @@
+ 
+ // lasttile is really "second to last tile."
+ static void RefreshLine(int lastpixel) {
+-	static uint32 pshift[2];
++	static uint32 pshift[4];
++	static uint32 pshift2[4];
+ 	static uint32 atlatch;
++	static uint32 atlatch2;
+ 	uint32 smorkus = RefreshAddr;
+-
++    uint32 smorkus2 = RefreshAddr2;
+ 	#define RefreshAddr smorkus
++	#define RefreshAddr2 smorkus2
+ 	uint32 vofs;
+ 	int X1;
+ 
+ 	register uint8 *P = Pline;
++//	register uint8 *P2 = Pline2;
+ 	int lasttile = lastpixel >> 3;
+ 	int numtiles;
+ 	static int norecurse = 0;	// Yeah, recursion would be bad.
+@@ -1081,27 +1228,33 @@
+ 	if (numtiles <= 0) return;
+ 
+ 	P = Pline;
+-
++//	P2 = Pline;
+ 	vofs = 0;
+-
++	int vofs2 = 0;
+ 	if(PEC586Hack)
+ 		vofs = ((RefreshAddr & 0x200) << 3) | ((RefreshAddr >> 12) & 7);
+ 	else
+ 		vofs = ((PPU[0] & 0x10) << 8) | ((RefreshAddr >> 12) & 7);
+-
++	if(vt03_mode)vofs = ((PPU[0] & 0x10) << 11) | ((RefreshAddr >> 12) & 7);
++	if(vt03_mode)vofs2 = ((0x10) << 11) | ((RefreshAddr2 >> 12) & 7);
+ 	if (!ScreenON && !SpriteON) {
+ 		uint32 tem;
+ 		tem = READPAL(0) | (READPAL(0) << 8) | (READPAL(0) << 16) | (READPAL(0) << 24);
+-		tem |= 0x40404040;
++		tem |= 0x80808080;
+ 		FCEU_dwmemset(Pline, tem, numtiles * 8);
++	//	FCEU_dwmemset(Pline2, tem, numtiles * 8);
++		//FCEU_dwmemset(Pline2, tem, numtiles * 8);
+ 		P += numtiles * 8;
++	//	P2 += numtiles * 8;
+ 		Pline = P;
++		//Pline2 = P2;
+ 
+ 		firsttile = lasttile;
+ 
+ 		#define TOFIXNUM (272 - 0x4)
+ 		if (lastpixel >= TOFIXNUM && tofix) {
+ 			Fixit1();
++			Fixit12();
+ 			tofix = 0;
+ 		}
+ 
+@@ -1112,14 +1265,23 @@
+ 	}
+ 
+ 	//Priority bits, needed for sprite emulation.
+-	PALRAM[0] |= 64;
+-	PALRAM[4] |= 64;
+-	PALRAM[8] |= 64;
+-	PALRAM[0xC] |= 64;
+-
++if(vt03_mode)
++{
++	PALRAM[0]    |= 128;
++	PALRAM[0x10] |= 128;
++	PALRAM[0x20] |= 128;
++	PALRAM[0x30] |= 128;
++}
++else
++{
++	PALRAM[0]   |= 128;
++	PALRAM[0x4] |= 128;
++	PALRAM[0x8] |= 128;
++	PALRAM[0xC] |= 128;
++}
+ 	//This high-level graphics MMC5 emulation code was written for MMC5 carts in "CL" mode.
+ 	//It's probably not totally correct for carts in "SL" mode.
+-
++//RefreshAddr2 = RefreshAddr;
+ #define PPUT_MMC5
+ 	if (MMC5Hack && geniestage != 1) {
+ 		if (MMC5HackCHRMode == 0 && (MMC5HackSPMode & 0x80)) {
+@@ -1143,6 +1305,13 @@
+ 			#define PPUT_MMC5CHR1
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++			//		#include "pputile.inc"
++			//		for(int p=0; p<8; p++)
++			//		{
++			//			//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++			//			//else P2[p] = P[p];
++			//		}
++			//		if (X1 >= 2) P +=8;
+ 			}
+ 			#undef PPUT_MMC5CHR1
+ 			#undef PPUT_MMC5SP
+@@ -1150,11 +1319,25 @@
+ 			#define PPUT_MMC5CHR1
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++		//			#include "pputile.inc"
++		//			for(int p=0; p<8; p++)
++		//			{
++		//				//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++		//				//else P2[p] = P[p];
++		//			}
++		//			if (X1 >= 2) P +=8;
+ 			}
+ 			#undef PPUT_MMC5CHR1
+ 		} else {
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++			//		#include "pputile.inc"
++			//		for(int p=0; p<8; p++)
++			//		{
++			//			//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++			//			//else P2[p] = P[p];
++			//		}
++			//		if (X1 >= 2) P +=8;
+ 			}
+ 		}
+ 	}
+@@ -1166,11 +1349,25 @@
+ 			#define PPU_BGFETCH
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++			//		#include "pputile.inc"
++			//		for(int p=0; p<8; p++)
++			//		{
++			//			//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++			//			//else P2[p] = P[p];
++			//		}
++			//		if (X1 >= 2) P +=8;
+ 			}
+ 			#undef PPU_BGFETCH
+ 		} else {
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++		//			#include "pputile.inc"
++		//			for(int p=0; p<8; p++)
++		//			{
++		//				//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++		//				//else P2[p] = P[p];
++		//			}
++		//			if (X1 >= 2) P +=8;
+ 			}
+ 		}
+ 		#undef PPUT_HOOK
+@@ -1180,37 +1377,64 @@
+ 			#define PPU_BGFETCH
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++		//			#include "pputile.inc"
++		//			for(int p=0; p<8; p++)
++		//			{
++		//				//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++		//				//else P2[p] = P[p];
++		//			}
++		//			if (X1 >= 2) P +=8;
+ 			}
+ 			#undef PPU_BGFETCH
+ 		} else {
+ 			for (X1 = firsttile; X1 < lasttile; X1++) {
+ 				#include "pputile.inc"
++		//		#include "pputile.inc"
++		//		for(int p=0; p<8; p++)
++		//		{
++		//			//if(P[p]&0x80  && RefreshAddr2)P[p]=P2[p]|0x80; 
++		//			//else P2[p] = P[p];
++		//		}
++		//		if (X1 >= 2) P +=8;
+ 			}
+ 		}
+ 	}
+ 
+ #undef vofs
+ #undef RefreshAddr
++#undef RefreshAddr2
+ 
+ 	//Reverse changes made before.
+-	PALRAM[0] &= 63;
+-	PALRAM[4] &= 63;
+-	PALRAM[8] &= 63;
+-	PALRAM[0xC] &= 63;
++	if(vt03_mode)
++	{
++	PALRAM[0]    &= 127;
++	PALRAM[0x10] &= 127;
++	PALRAM[0x20] &= 127;
++	PALRAM[0x30] &= 127;
++	}
++	else
++	{
++	PALRAM[0]   &= 127;
++	PALRAM[0x4] &= 127;
++	PALRAM[0x8] &= 127;
++	PALRAM[0xC] &= 127;
++	}
+ 
+ 	RefreshAddr = smorkus;
++	RefreshAddr2 = smorkus2;
+ 	if (firsttile <= 2 && 2 < lasttile && !(PPU[1] & 2)) {
+ 		uint32 tem;
+ 		tem = READPAL(0) | (READPAL(0) << 8) | (READPAL(0) << 16) | (READPAL(0) << 24);
+-		tem |= 0x40404040;
++		tem |= 0x80808080;
+ 		*(uint32*)Plinef = *(uint32*)(Plinef + 4) = tem;
++		
+ 	}
+ 
+ 	if (!ScreenON) {
+ 		uint32 tem;
+ 		int tstart, tcount;
+ 		tem = READPAL(0) | (READPAL(0) << 8) | (READPAL(0) << 16) | (READPAL(0) << 24);
+-		tem |= 0x40404040;
++		tem |= 0x80808080;
+ 
+ 		tcount = lasttile - firsttile;
+ 		tstart = firsttile - 2;
+@@ -1224,6 +1448,7 @@
+ 
+ 	if (lastpixel >= TOFIXNUM && tofix) {
+ 		Fixit1();
++	    Fixit12();
+ 		tofix = 0;
+ 	}
+ 
+@@ -1234,6 +1459,7 @@
+ 		InputScanlineHook(Plinef, spork ? sprlinebuf : 0, linestartts, lasttile * 8 - 16);
+ 	}
+ 	Pline = P;
++//	Pline2 = P2;
+ 	firsttile = lasttile;
+ }
+ 
+@@ -1245,8 +1471,18 @@
+ 		RefreshAddr = rad;
+ 	}
+ }
+-
+-static void Fixit1(void) {
++static INLINE void Fixit22(void) {
++	if (ScreenON || SpriteON) {
++		uint32 rad = RefreshAddr2;
++		if(rad)
++		{
++		rad &= 0xFBE0;
++		rad |= TempAddr2 & 0x041f;
++		RefreshAddr2 = rad;
++		}
++	}
++}
++static void Fixit1(void) {  // TODOD нужен дубль для второго офна?
+ 	if (ScreenON || SpriteON) {
+ 		uint32 rad = RefreshAddr;
+ 
+@@ -1263,20 +1499,38 @@
+ 		RefreshAddr = rad;
+ 	}
+ }
+-
++static void Fixit12(void) {  // TODOD нужен дубль для второго офна?
++	if (ScreenON || SpriteON) {
++		uint32 rad = RefreshAddr2;
++			if(rad)
++		{
++		if ((rad & 0x7000) == 0x7000) {
++			rad ^= 0x7000;
++			if ((rad & 0x3E0) == 0x3A0)
++				rad ^= 0xBA0;
++			else if ((rad & 0x3E0) == 0x3e0)
++				rad ^= 0x3e0;
++			else
++				rad += 0x20;
++		} else
++			rad += 0x1000;
++		RefreshAddr2 = rad;
++			}
++	}
++}
+ void MMC5_hb(int);		//Ugh ugh ugh.
+ static void DoLine(void) {
+-	if (scanline >= 240 && scanline != totalscanlines) {
+-		X6502_Run(256 + 69);
+-		scanline++;
+-		X6502_Run(16);
+-		return;
+-	}
++	//if (scanline >= 240 && scanline != totalscanlines) {
++	//	X6502_Run(256 + 69);
++	//	scanline++;
++	//	X6502_Run(16);
++	//	return;
++	//}
+ 
+ 	int x;
+ 	uint8 *target = XBuf + ((scanline < 240 ? scanline : 240) << 8);
+ 	u8* dtarget = XDBuf + ((scanline < 240 ? scanline : 240) << 8);
+-
++//	uint8 *target2 = &xbb[(scanline < 240 ? scanline : 240) << 8]; 
+ 	if (MMC5Hack) MMC5_hb(scanline);
+ 
+ 	X6502_Run(256);
+@@ -1289,8 +1543,9 @@
+ 			col = READPAL(0);
+ 		else col = gNoBGFillColor;
+ 		tem = col | (col << 8) | (col << 16) | (col << 24);
+-		tem |= 0x40404040; 
++		tem |= 0x80808080; 
+ 		FCEU_dwmemset(target, tem, 256);
++	//	FCEU_dwmemset(target2, tem, 256);
+ 	}
+ 
+ 	if (SpriteON)
+@@ -1308,13 +1563,13 @@
+ 	//some pathetic attempts at deemph
+ 	if ((PPU[1] >> 5) == 0x7) {
+ 		for (x = 63; x >= 0; x--)
+-			*(uint32*)&target[x << 2] = ((*(uint32*)&target[x << 2]) & 0x3f3f3f3f) | 0xc0c0c0c0;
++			*(uint32*)&target[x << 2] = ((*(uint32*)&target[x << 2]) & 0x7f7f7f7f) | 0xc0c0c0c0;
+ 	} else if (PPU[1] & 0xE0)
+ 		for (x = 63; x >= 0; x--)
+-			*(uint32*)&target[x << 2] = (*(uint32*)&target[x << 2]) | 0x40404040;
++			*(uint32*)&target[x << 2] = (*(uint32*)&target[x << 2]) | 0x80808080;
+ 	else
+ 		for (x = 63; x >= 0; x--)
+-			*(uint32*)&target[x << 2] = ((*(uint32*)&target[x << 2]) & 0x3f3f3f3f) | 0x80808080;
++			*(uint32*)&target[x << 2] = ((*(uint32*)&target[x << 2]) & 0x7f7f7f7f) | 0x80808080;
+ 
+ 	//write the actual deemph
+ 	for (x = 63; x >= 0; x--)
+@@ -1328,12 +1583,14 @@
+ 	if (GameHBIRQHook && (ScreenON || SpriteON) && ((PPU[0] & 0x38) != 0x18)) {
+ 		X6502_Run(6);
+ 		Fixit2();
++		Fixit22();
+ 		X6502_Run(4);
+ 		GameHBIRQHook();
+ 		X6502_Run(85 - 16 - 10);
+ 	} else {
+ 		X6502_Run(6);	// Tried 65, caused problems with Slalom(maybe others)
+ 		Fixit2();
++Fixit22();
+ 		X6502_Run(85 - 6 - 16);
+ 
+ 		// A semi-hack for Star Trek: 25th Anniversary
+@@ -1350,6 +1607,10 @@
+ 	scanline++;
+ 	if (scanline < 240) {
+ 		ResetRL(XBuf + (scanline << 8));
++	//	memset(xbb[scanline << 8], 0xFF, 256);
++	//	for(int x = 0; x<256; x++)
++	//	{xbb[(scanline<<8)+x] = 0xFF; }
++		//Pline2 = xbb;
+ 	}
+ 	X6502_Run(16);
+ }
+@@ -1358,151 +1619,242 @@
+ #define H_FLIP  0x40
+ #define SP_BACK 0x20
+ 
+-typedef struct {
+-	uint8 y, no, atr, x;
+-} SPR;
+ 
+-typedef struct {
+-	uint8 ca[2], atr, x;
+-} SPRB;
+ 
+ void FCEUI_DisableSpriteLimitation(int a) {
+-	maxsprites = a ? 64 : 8;
++	maxsprites = a ? 256 : 256;
+ }
+ 
+ static uint8 numsprites, SpriteBlurp;
+ static void FetchSpriteData(void) {
+ 	uint8 ns, sb;
+-	SPR *spr;
+ 	uint8 H;
+-	int n;
+ 	int vofs;
+ 	uint8 P0 = PPU[0];
+-
+-	spr = (SPR*)SPRAM;
++	int kalel;
+ 	H = 8;
+ 
+ 	ns = sb = 0;
+ 
+-	vofs = (uint32)(P0 & 0x8 & (((P0 & 0x20) ^ 0x20) >> 2)) << 9;
++	vofs = (unsigned int)(P0 & 0x8 & (((P0 & 0x20) ^ 0x20) >> 2)) << 9;
++if(vt03_mode)vofs = (unsigned int)(P0 & 0x8 & (((P0 & 0x20) ^ 0x20) >> 2)) << 12;
+ 	H += (P0 & 0x20) >> 2;
+ 
+-	if (!PPU_hook)
+-		for (n = 63; n >= 0; n--, spr++) {
+-			if ((uint32)(scanline - spr->y) >= H) continue;
+-			if (ns < maxsprites) {
+-				if (n == 63) sb = 1;
++	if (nes128 == 0) {
++		for (int n = 0;n < 64;n++)
++		{
++			SPR *spr = (SPR *)&SPRAM[n * 4];
++
++			if (n < 2)
++			{
++				spr = (SPR *)&SPRAM[(n * 4 + PPUSPL) & 0xFF];
++			}
++
++			if ((unsigned int)(scanline - spr->y) >= H) continue;
+ 
++			if (ns < 64)
+ 				{
+-					SPRB dst;
++				SPRB *dst = &SPRBUF[ns];
++
++				if (n == 0)
++					sb = 1;
++
+ 					uint8 *C;
+ 					int t;
+-					uint32 vadr;
++				unsigned int vadr;
+ 
+-					t = (int)scanline - (spr->y);
++				t = ((int)scanline - (spr->y));
+ 
+-					if (Sprite16)
++				if (Sprite16) {
+ 						vadr = ((spr->no & 1) << 12) + ((spr->no & 0xFE) << 4);
++					if (vt03_mode)
++					{
++						vadr = ((spr->no & 1) << 15) + ((spr->no & 0xFE) << 5);
++						//if (spr->no & 1) vadr += 0x2000;
++					}
++					if((vadr<0x3fff)&&((spr->atr & 0x10) == 0x10))vadr += 0xA000;
++					if((vadr>0x4000)&&((spr->atr & 0x10) == 0x10))vadr += 0x2000;
++				}
+ 					else
++				{
++			//		if ((spr->atr & 0x10) == 0x10)
++			//			vadr = (spr->no << 4) + vofs + 0x4000;
++			//		else
+ 						vadr = (spr->no << 4) + vofs;
++					if(vt03_mode)vadr = (spr->no << 5) + vofs;
++					if((vadr>0x3fff)&&((spr->atr & 0x10) == 0x10))vadr += 0x2000;
++					if((vadr<0x4000)&&((spr->atr & 0x10) == 0x10))vadr += 0x6000;
++				}
+ 
+-					if (spr->atr & V_FLIP) {
++				if (spr->atr&V_FLIP)
++				{
+ 						vadr += 7;
+ 						vadr -= t;
+ 						vadr += (P0 & 0x20) >> 1;
+ 						vadr -= t & 8;
+-					} else {
++				}
++				else
++				{
+ 						vadr += t;
+ 						vadr += t & 8;
+ 					}
++				if (Sprite16&&(vadr&0x10&&vt03_mode))vadr += 0x10;
++			//	vadr &= 0xffff;
+ 
+-					/* Fix this geniestage hack */
+-					if (MMC5Hack && geniestage != 1)
+-						C = MMC5SPRVRAMADR(vadr);
++				
++				if (MMC5Hack && geniestage != 1 && Sprite16) C = MMC5SPRVRAMADR(vadr);
+ 					else
+-						C = VRAMADR(vadr);
++			{if(vadr<0x4000)C = VRAMADR(vadr);
++			else C = &extra_ppu[vadr];
++				}
++			dst->ca[0] = C[0];
+ 
+-					if (SpriteON)
+-						RENDER_LOGP(C);
+-					dst.ca[0] = C[0];
+-					if (SpriteON)
+-						RENDER_LOGP(C + 8);
+-					dst.ca[1] = C[8];
+-					dst.x = spr->x;
+-					dst.atr = spr->atr;
++			if (PPU_hook && ns < 8)
++			{
++				PPU_hook(0x10000);
++			//	if ((spr->atr & 0x10) == 0x10)
++			//		PPU_hook(vadr + 0x4000);
++		             PPU_hook(vadr);
++			}
+ 
+-					*(uint32*)&SPRBUF[ns << 2] = *(uint32*)&dst;
++		dst->ca[1] = C[8];
++		if (PPU_hook && ns < 8) {
++			//	if ((spr->atr & 0x10) == 0x10)
++			//	PPU_hook(vadr+0x4000 | 8);
++			PPU_hook(vadr | 8);
+ 				}
++		dst->ca[2] = C[16];
++
++		dst->ca[3] = C[24];
++
++		if (Sprite16)
++		{
++			
++			dst->ca[4] = C[32];
++			dst->ca[5] = C[40];
++			dst->ca[6] = C[16];
++			dst->ca[7] = C[24];
++		}
++
++				dst->x = spr->x;
++				dst->atr = spr->atr;
+ 
+ 				ns++;
+-			} else {
++			}
++			else
++			{
+ 				PPU_status |= 0x20;
+ 				break;
+ 			}
+ 		}
+-	else
+-		for (n = 63; n >= 0; n--, spr++) {
+-			if ((uint32)(scanline - spr->y) >= H) continue;
+-
+-			if (ns < maxsprites) {
+-				if (n == 63) sb = 1;
+-
++	}
++	if (nes128 == 1) {
++		for (int n = 0;n < 256;n++)
+ 				{
+-					SPRB dst;
++			SPR spr = *(SPR *)SPRAM;
++			spr.y = SPRAM[n];
++			spr.no = SPRAM[n + 0x100];
++			spr.atr = SPRAM[n + 0x200];
++			spr.x = SPRAM[n + 0x300];
++			// if(n < 2)
++			//   {
++			//    spr = *(SPR *)&SPRAM[(n * 4 + PPUSPL) & 0xFF];
++			//        spr.y = SPRAM[(n + PPUSPL) & 0xFF];
++			//    spr.no = SPRAM[(n+256 + PPUSPL) & 0xFF];
++			//       spr.atr = SPRAM[(n+512 + PPUSPL) & 0xFF];
++			//     spr.x = SPRAM[(n+768 + PPUSPL) & 0xFF];
++			//           }
++
++			if ((unsigned int)(scanline - spr.y) >= H) continue;
++
++			if (ns<maxsprites)
++			{
++				SPRB *dst = &SPRBUF[ns];
++				//  dst->ca[0] = SPRBUF[ns];
++				if (n == 0)
++					sb = 1;
++
+ 					uint8 *C;
+ 					int t;
+-					uint32 vadr;
++				unsigned int vadr;
+ 
+-					t = (int)scanline - (spr->y);
++				t = (int)scanline - (spr.y);
+ 
+-					if (Sprite16)
+-						vadr = ((spr->no & 1) << 12) + ((spr->no & 0xFE) << 4);
++				if (Sprite16) {
++					vadr = ((spr.no & 1) << 12) + ((spr.no & 0xFE) << 4);
++					if (vt03_mode)
++					{
++						vadr = ((spr.no & 1) << 15) + ((spr.no & 0xFE) << 5);
++					//	if (spr.no & 1) vadr += 0x2000;
++					}
++					if((vadr<0x4000)&&((spr.atr & 0x10) == 0x10))vadr += 0xA000;
++					if((vadr>0x4000)&&((spr.atr & 0x10) == 0x10))vadr += 0x4000;
++				}
+ 					else
+-						vadr = (spr->no << 4) + vofs;
++				{
++					vadr = (spr.no << 4) + vofs;
++					if (vt03_mode)vadr = (spr.no << 5) + vofs;
++					//if ((spr.atr & 0x10) == 0x10)vadr += 0x8000;
++					if((vadr<0x4000)&&((spr.atr & 0x10) == 0x10))vadr += 0x6000;
++					if((vadr>0x3fff)&&((spr.atr & 0x10) == 0x10))vadr += 0x2000;
++				}
++				
+ 
+-					if (spr->atr & V_FLIP) {
++				if (spr.atr&V_FLIP)
++				{
+ 						vadr += 7;
+ 						vadr -= t;
+ 						vadr += (P0 & 0x20) >> 1;
+ 						vadr -= t & 8;
+-					} else {
++				}
++				else
++				{
+ 						vadr += t;
+ 						vadr += t & 8;
+ 					}
+ 
+-					if (MMC5Hack)
+-						C = MMC5SPRVRAMADR(vadr);
+-					else
+-						C = VRAMADR(vadr);
+-					if (SpriteON)
+-						RENDER_LOGP(C);
+-					dst.ca[0] = C[0];
+-					if (ns < 8) {
+-						PPU_hook(0x2000);
++				if (MMC5Hack && geniestage != 1 && Sprite16) C = MMC5SPRVRAMADR(vadr);
++				else {if(vadr<0x4000)C = VRAMADR(vadr);
++
++				else C = &extra_ppu[vadr];
++				}
++				//if ((spr.atr & 0x10) == 0x10)
++				dst->ca[0] = C[0];
++
++				if (PPU_hook && ns < 8)
++				{
++					PPU_hook(0x10000);
+ 						PPU_hook(vadr);
+ 					}
+-					if (SpriteON)
+-						RENDER_LOGP(C + 8);
+-					dst.ca[1] = C[8];
+-					dst.x = spr->x;
+-					dst.atr = spr->atr;
+ 
++				dst->ca[1] = C[8];
++				dst->ca[2] = C[16];
++				dst->ca[3] = C[24];
++				if (PPU_hook && ns<8)
++					PPU_hook(vadr | 8);
+ 
+-					*(uint32*)&SPRBUF[ns << 2] = *(uint32*)&dst;
+-				}
++				dst->x = spr.x;
++				dst->atr = spr.atr;
+ 
+ 				ns++;
+-			} else {
++			}
++			else
++			{
+ 				PPU_status |= 0x20;
+ 				break;
+ 			}
+ 		}
++	}
+ 
+-	//Handle case when >8 sprites per scanline option is enabled.
+-	if (ns > 8) PPU_status |= 0x20;
+-	else if (PPU_hook) {
+-		for (n = 0; n < (8 - ns); n++) {
+-			PPU_hook(0x2000);
++	//if(ns>=7)
++	//printf("%d %d\n",scanline,ns);
++	if (ns>8) PPU_status |= 0x20;      /* Handle case when >8 sprites per
++									   scanline option is enabled. */
++	else if (PPU_hook)
++	{
++		for (int n = 0; n < (8 - ns); n++)
++		{
++			PPU_hook(0x10000);
+ 			PPU_hook(vofs);
+ 		}
+ 	}
+@@ -1517,22 +1869,28 @@
+ 	spork = 0;
+ 	if (!numsprites) return;
+ 
+-	FCEU_dwmemset(sprlinebuf, 0x80808080, 256);
++	FCEU_dwmemset(sprlinebuf, 0x0, 256);
+ 	numsprites--;
+ 	spr = (SPRB*)SPRBUF + numsprites;
+ 
+ 	for (n = numsprites; n >= 0; n--, spr--) {
+ 		uint32 pixdata;
++		uint32 lele;
+ 		uint8 J, atr;
+ 
+ 		int x = spr->x;
+ 		uint8 *C;
++		uint8 *C2;
+ 		int VB;
+ 
+ 		pixdata = ppulut1[spr->ca[0]] | ppulut2[spr->ca[1]];
+-		J = spr->ca[0] | spr->ca[1];
++		if (vt03_mode)pixdata = ppulut1[spr->ca[0]] | ppulut2[spr->ca[1]] | ppulut4[spr->ca[2]] | ppulut5[spr->ca[3]];
++//	if (vt03_mode&&Sprite16)pixdata = ppulut1[spr->ca[0]] | ppulut2[spr->ca[1]] | ppulut1[spr->ca[4]] | ppulut2[spr->ca[5]];// | ppulut4[spr->ca[4]] | ppulut5[spr->ca[5]] | ppulut4[spr->ca[6]] | ppulut5[spr->ca[7]];
++	//	if (vt03_mode&&Sprite16&&(n&1))pixdata >>= 2;
++	if(vt03_mode)	J = spr->ca[0] | spr->ca[1] | spr->ca[2] | spr->ca[3];
++	else J = spr->ca[0] | spr->ca[1];
+ 		atr = spr->atr;
+-
++		lele = pixdata;
+ 		if (J) {
+ 			if (n == 0 && SpriteBlurp && !(PPU_status & 0x40)) {
+ 				sphitx = x;
+@@ -1546,78 +1904,286 @@
+ 								((J >> 3) & 0x04) |
+ 								((J >> 5) & 0x02) |
+ 								((J >> 7) & 0x01);
++		//	sphitdata >>= 1;
+ 			}
+ 
++            C2 = sprlinebuf2 + x;
+ 			C = sprlinebuf + x;
+-			VB = (0x10) + ((atr & 3) << 2);
++			if(!vt03_mode)VB = (0x10) + ((atr & 0xf) << 2);
++			else VB = (0x40) + ((atr & 0xF) << 4);
++		
++			if(vt03_mode)
+ 
++			{
+ 			if (atr & SP_BACK) {
+ 				if (atr & H_FLIP) {
+-					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x01) C[0] = READPAL(VB | pixdata) | 0x40;
++					if (J & 0x01) C[0] = READPAL(VB | pixdata)        & 0x7F | 0x80;
++
++					if (J & 0x80) C2[7] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4;
++					if (J & 0x01) C2[0] = READPAL(VB | lele);
+ 				} else {
+-					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 3)) | 0x40;
++					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 0xF))& 0x7F | 0x80;
+ 					pixdata >>= 4;
+-					if (J & 0x01) C[7] = READPAL(VB | pixdata) | 0x40;
++					if (J & 0x01) C[7] = READPAL(VB | pixdata)        & 0x7F | 0x80;
++
++					if (J & 0x80) C2[0] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x01) C2[7] = READPAL(VB | lele)        ;
+ 				}
+ 			} else {
+ 				if (atr & H_FLIP) {
+-					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 3));
++					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 3));
++					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 3));
++					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 3));
++					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 3));
++					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 3));
++					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+-					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 3));
++					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 0xF));
+ 					pixdata >>= 4;
+ 					if (J & 0x01) C[0] = READPAL(VB | pixdata);
++
++					if (J & 0x80) C2[7] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x01) C2[0] = READPAL(VB | lele);
++				} else {
++					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 0xF));
++					pixdata >>= 4;
++					if (J & 0x01) C[7] = READPAL(VB | pixdata);
++
++					if (J & 0x80) C2[0] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x01) C2[7] = READPAL(VB | lele);
++				}
++			}
++			}
++			else
++			{
++				if (atr & SP_BACK) {
++				if (atr & H_FLIP) {
++					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x01) C[0] = READPAL(VB | pixdata) | 0x80;
++
++					
++					if (J & 0x80) C2[7] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4;
++					if (J & 0x01) C2[0] = READPAL(VB | lele);
+ 				} else {
+-					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 3));
++					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 0xF)) | 0x80;
++					pixdata >>= 4;
++					if (J & 0x01) C[7] = READPAL(VB | pixdata) | 0x80;
++
++					if (J & 0x80) C2[0] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x01) C2[7] = READPAL(VB | lele)        ;
++				}
++			} else {
++				if (atr & H_FLIP) {
++					if (J & 0x80) C[7] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x40) C[6] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x20) C[5] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 3));
++					if (J & 0x10) C[4] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 3));
++					if (J & 0x08) C[3] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 3));
++					if (J & 0x04) C[2] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 3));
++					if (J & 0x02) C[1] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 3));
++					if (J & 0x01) C[0] = READPAL(VB | pixdata);
++
++					if (J & 0x80) C2[7] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4;
++					if (J & 0x01) C2[0] = READPAL(VB | lele);
++				} else {
++					if (J & 0x80) C[0] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x40) C[1] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x20) C[2] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x10) C[3] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+-					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 3));
++					if (J & 0x08) C[4] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x04) C[5] = READPAL(VB | (pixdata & 0x3));
++					pixdata >>= 4;
++					if (J & 0x02) C[6] = READPAL(VB | (pixdata & 0x3));
+ 					pixdata >>= 4;
+ 					if (J & 0x01) C[7] = READPAL(VB | pixdata);
++
++					if (J & 0x80) C2[0] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x40) C2[1] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x20) C2[2] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x10) C2[3] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x08) C2[4] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x04) C2[5] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x02) C2[6] = READPAL(VB | (lele & 0xF));
++					lele >>= 4; 
++					if (J & 0x01) C2[7] = READPAL(VB | lele)        ;
++			}
+ 				}
+ 			}
+ 		}
+@@ -1629,7 +2195,8 @@
+ static void CopySprites(uint8 *target) {
+ 	uint8 n = ((PPU[1] & 4) ^ 4) << 1;
+ 	uint8 *P = target;
+-
++	uint8 Pfake[264];
++ //   uint8 *P2 = target2;
+ 	if (!spork) return;
+ 	spork = 0;
+ 
+@@ -1639,61 +2206,72 @@
+ 	{
+ 		uint32 t = *(uint32*)(sprlinebuf + n);
+ 
+-		if (t != 0x80808080) {
+-			#ifdef LSB_FIRST
+-			if (!(t & 0x80)) {
+-				if (!(t & 0x40) || (P[n] & 0x40))		// Normal sprite || behind bg sprite
++	//	if (t != 0x0) {
++		//	#ifdef LSB_FIRST
++		if ((t & 0x7F))// {
++			if (!(t & 0x80) || (P[n] & 0x80))		// Normal sprite || behind bg sprite
+ 					P[n] = sprlinebuf[n];
+-			}
+-
+-			if (!(t & 0x8000)) {
+-				if (!(t & 0x4000) || (P[n + 1] & 0x40))		// Normal sprite || behind bg sprite
+-					P[n + 1] = (sprlinebuf + 1)[n];
+-			}
+-
+-			if (!(t & 0x800000)) {
+-				if (!(t & 0x400000) || (P[n + 2] & 0x40))	// Normal sprite || behind bg sprite
+-					P[n + 2] = (sprlinebuf + 2)[n];
+-			}
+-
+-			if (!(t & 0x80000000)) {
+-				if (!(t & 0x40000000) || (P[n + 3] & 0x40))	// Normal sprite || behind bg sprite
+-					P[n + 3] = (sprlinebuf + 3)[n];
+-			}
+-			#else
+-			/* TODO:  Simplify */
+-			if (!(t & 0x80000000)) {
+-				if (!(t & 0x40000000))	// Normal sprite
+-					P[n] = sprlinebuf[n];
+-				else if (P[n] & 64)		// behind bg sprite
+-					P[n] = sprlinebuf[n];
+-			}
++		   //	else if(!(P[n]&0x7f))P[n]= xbb[((scanline < 280 ? scanline : 280) << 8)+n];
++		   //	}
++		   // else if(!(P[n]&0x7f))P[n]= xbb[((scanline < 280 ? scanline : 280) << 8)+n];
+ 
+-			if (!(t & 0x800000)) {
+-				if (!(t & 0x400000))	// Normal sprite
++		if (((t>>8)&0x7F)) //{
++			if (!(t & 0x8000) || (P[n + 1] & 0x80))		// Normal sprite || behind bg sprite
+ 					P[n + 1] = (sprlinebuf + 1)[n];
+-				else if (P[n + 1] & 64)	// behind bg sprite
+-					P[n + 1] = (sprlinebuf + 1)[n];
+-			}
++		//else if(!(P[n+1]&0x7f))P[n+1]=xbb[((scanline < 280 ? scanline : 280) << 8)+n+1];
++		//	}
++		//else if(!(P[n+1]&0x7f))P[n+1]=xbb[((scanline < 280 ? scanline : 280) << 8)+n+1];
+ 
+-			if (!(t & 0x8000)) {
+-				if (!(t & 0x4000))		// Normal sprite
+-					P[n + 2] = (sprlinebuf + 2)[n];
+-				else if (P[n + 2] & 64)	// behind bg sprite
++		if (((t>>16)&0x7F))// {
++			if (!(t & 0x800000) || (P[n + 2] & 0x80))	// Normal sprite || behind bg sprite
+ 					P[n + 2] = (sprlinebuf + 2)[n];
+-			}
++		//   	else if(!(P[n+2]&0x7f))P[n+2]=xbb[((scanline < 280 ? scanline : 280) << 8)+n+2];
++		//   	}
++		  //  else if(!(P[n+2]&0x7f))P[n+2]=xbb[((scanline < 280 ? scanline : 280) << 8)+n+2];
+ 
+-			if (!(t & 0x80)) {
+-				if (!(t & 0x40))		// Normal sprite
+-					P[n + 3] = (sprlinebuf + 3)[n];
+-				else if (P[n + 3] & 64)	// behind bg sprite
++		if ((t>>24)&0x7F) //{ 
++			if (!(t & 0x80000000) || (P[n + 3] & 0x80))	// Normal sprite || behind bg sprite
+ 					P[n + 3] = (sprlinebuf + 3)[n];
+-			}
+-			#endif
+-		}
++		  // 	else if(!(P[n+3]&0x7f))P[n+3]=xbb[((scanline < 240 ? scanline : 240) << 4)+n+3];
++		  // 	}
++		  //  else if(!(P[n+3]&0x7f))P[n+3]=xbb[((scanline < 240 ? scanline : 240) << 8)+n+3];
++		//	
++		//	#else
++	//	/* TODO:  Simplify */
++	//	if ((t>>24)&0xFF)  {
++	//		if (!(t & 0x80000000))	// Normal sprite
++	//			P[n] = sprlinebuf[n];
++	//		else if (P[n] & 128)		// behind bg sprite
++	//			P[n] = sprlinebuf[n];
++	//	}
++	//
++	//	if (((t>>16)&0xFF)) {
++	//		if (!(t & 0x800000))	// Normal sprite
++	//			P[n + 1] = (sprlinebuf + 1)[n];
++	//		else if (P[n + 1] & 128)	// behind bg sprite
++	//			P[n + 1] = (sprlinebuf + 1)[n];
++	//	}
++	//
++	//	if (((t>>8)&0xFF))  {
++	//		if (!(t & 0x8000))		// Normal sprite
++	//			P[n + 2] = (sprlinebuf + 2)[n];
++	//		else if (P[n + 2] & 128)	// behind bg sprite
++	//			P[n + 2] = (sprlinebuf + 2)[n];
++	//	}
++	//
++	//	if ((t & 0xFF))   {
++	//		if (!(t & 0x80))		// Nomal sprite
++	//			P[n + 3] = (sprlinebuf + 3)[n];
++	//		else if (P[n + 3] & 128)	// behind bg sprite
++	//			P[n + 3] = (sprlinebuf + 3)[n];
++	//	}
++		//	#endif
++//	}
+ 	}
+ 	n += 4;
+ 	if (n) goto loopskie;
++	//for(int x=0; x<256;x++)
++	//	sprlinebuf[x]=sprlinebuf2[x];
+ }
+ 
+ void FCEUPPU_SetVideoSystem(int w) {
+@@ -1721,9 +2299,12 @@
+ 
+ void FCEUPPU_Reset(void) {
+ 	VRAMBuffer = PPU[0] = PPU[1] = PPU_status = PPU[3] = 0;
++	for(int x = 0; x<0x10000; x++)extra_ppu[x] = 0;
++
+ 	PPUSPL = 0;
+ 	PPUGenLatch = 0;
+ 	RefreshAddr = TempAddr = 0;
++	RefreshAddr2 = TempAddr2 = 32;
+ 	vtoggle = 0;
+ 	ppudead = 2;
+ 	kook = 0;
+@@ -1736,12 +2317,13 @@
+ 	int x;
+ 
+ 	memset(NTARAM, 0x00, 0x800);
+-	memset(PALRAM, 0x00, 0x20);
++	memset(NTARAM2, 0x00, 0x800);
++	memset(PALRAM, 0x00, 0x100);
+ 	memset(UPALRAM, 0x00, 0x03);
+-	memset(SPRAM, 0x00, 0x100);
++	memset(SPRAM, 0x00, 0x400);
+ 	FCEUPPU_Reset();
+ 
+-	for (x = 0x2000; x < 0x4000; x += 8) {
++	for (x = 0x2000; x < 0x3000; x += 8) {
+ 		ARead[x] = A200x;
+ 		BWrite[x] = B2000;
+ 		ARead[x + 1] = A200x;
+@@ -1760,6 +2342,11 @@
+ 		BWrite[x + 7] = B2007;
+ 	}
+ 	BWrite[0x4014] = B4014;
++	BWrite[0x401C] = B401C;
++	BWrite[0x3005] = B3005;
++	BWrite[0x3006] = B3006;
++	BWrite[0x3007] = B3007;
++
+ }
+ 
+ int FCEUPPU_Loop(int skip) {
+@@ -1771,6 +2358,7 @@
+ 	//Needed for Knight Rider, possibly others.
+ 	if (ppudead) {
+ 		memset(XBuf, 0x80, 256 * 240);
++//	    memset(xbb, 0x80, 256 * 240);
+ 		X6502_Run(scanlines_per_frame * (256 + 85));
+ 		ppudead--;
+ 	} else {
+@@ -1809,7 +2397,7 @@
+ 					GameHBIRQHook();
+ 				if (PPU_hook)
+ 					for (x = 0; x < 42; x++) {
+-						PPU_hook(0x2000); PPU_hook(0);
++						PPU_hook(0x10000); PPU_hook(0);
+ 					}
+ 				if (GameHBIRQHook2)
+ 					GameHBIRQHook2();
+@@ -1817,13 +2405,18 @@
+ 			X6502_Run(85 - 16);
+ 			if (ScreenON || SpriteON) {
+ 				RefreshAddr = TempAddr;
+-				if (PPU_hook) PPU_hook(RefreshAddr & 0x3fff);
++				RefreshAddr2 = TempAddr2;
++				if (PPU_hook) PPU_hook(RefreshAddr&0xffff);
++				if (PPU_hook) PPU_hook(RefreshAddr2&0xffff);
+ 			}
+ 
+ 			//Clean this stuff up later.
+ 			spork = numsprites = 0;
+ 			ResetRL(XBuf);
+-
++          //  memset(xbb[scanline << 8], 0xFF, 256);
++//for(int x = 0; x<256; x++)
++	//	{xbb[(scanline<<8)+x] = 0xFF; }
++	//	    Pline2 = xbb;
+ 			X6502_Run(16 - kook);
+ 			kook ^= 1;
+ 		}
+@@ -1861,7 +2454,7 @@
+ 				totalscanlines = normalscanlines;
+ 			else
+ 				totalscanlines = normalscanlines + (overclock_enabled ? postrenderscanlines : 0);
+-
++			if (nesclock)totalscanlines = 240 + nesclock;
+ 			for (scanline = 0; scanline < totalscanlines; ) {	//scanline is incremented in  DoLine.  Evil. :/
+ 				deempcnt[deemp]++;
+ 				if (scanline < 240)
+@@ -1907,25 +2500,33 @@
+ 
+ int (*PPU_MASTER)(int skip) = FCEUPPU_Loop;
+ 
+-static uint16 TempAddrT, RefreshAddrT;
++static uint16 TempAddrT, RefreshAddrT, TempAddrT2, RefreshAddrT2;
+ 
+ void FCEUPPU_LoadState(int version) {
+ 	TempAddr = TempAddrT;
+ 	RefreshAddr = RefreshAddrT;
++	TempAddr2 = TempAddrT2;
++	RefreshAddr2 = RefreshAddrT2;
+ }
+ 
+ SFORMAT FCEUPPU_STATEINFO[] = {
+ 	{ NTARAM, 0x800, "NTAR" },
+-	{ PALRAM, 0x20, "PRAM" },
+-	{ SPRAM, 0x100, "SPRA" },
++	{ PALRAM, 0x100, "PRAM" },
++	{ SPRAM, 0x400, "SPRA" },
++	{ extra_ppu, 0x10000, "EXPPU" },
++//	{ extra_ppu2, 0x2000, "EXPPEXIT" },
+ 	{ PPU, 0x4, "PPUR" },
+ 	{ &kook, 1, "KOOK" },
++	{ &abcde, 1, "FLAGV" },
+ 	{ &ppudead, 1, "DEAD" },
+ 	{ &PPUSPL, 1, "PSPL" },
+ 	{ &XOffset, 1, "XOFF" },
++	{ &XOffset2, 1, "XOFFF" },
+ 	{ &vtoggle, 1, "VTGL" },
+ 	{ &RefreshAddrT, 2 | FCEUSTATE_RLSB, "RADD" },
+ 	{ &TempAddrT, 2 | FCEUSTATE_RLSB, "TADD" },
++	{ &RefreshAddrT2, 2 | FCEUSTATE_RLSB, "RADU" },
++	{ &TempAddrT2, 2 | FCEUSTATE_RLSB, "TADU" },
+ 	{ &VRAMBuffer, 1, "VBUF" },
+ 	{ &PPUGenLatch, 1, "PGEN" },
+ 	{ 0 }
+@@ -1969,16 +2570,18 @@
+ void FCEUPPU_SaveState(void) {
+ 	TempAddrT = TempAddr;
+ 	RefreshAddrT = RefreshAddr;
++	TempAddrT2 = TempAddr2;
++	RefreshAddrT2 = RefreshAddr2;
+ }
+ 
+ uint32 FCEUPPU_PeekAddress()
+ {
+ 	if (newppu)
+ 	{
+-		return ppur.get_2007access() & 0x3FFF;
++		return ppur.get_2007access() &0xffff;
+ 	}
+ 
+-	return RefreshAddr & 0x3FFF;
++	return RefreshAddr &0xffff;
+ }
+ 
+ //---------------------
+@@ -2054,11 +2657,11 @@
+ 
+ static inline int PaletteAdjustPixel(int pixel) {
+ 	if ((PPU[1] >> 5) == 0x7)
+-		return (pixel & 0x3f) | 0xc0;
++		return (pixel & 0x7f) | 0xc0;
+ 	else if (PPU[1] & 0xE0)
+-		return pixel | 0x40;
++		return pixel | 0x80;
+ 	else
+-		return (pixel & 0x3F) | 0x80;
++		return (pixel & 0x7f) | 0x80;
+ }
+ 
+ int framectr = 0;
+@@ -2155,9 +2758,6 @@
+ 				DEBUG(FCEUD_UpdateNTView(scanline = yp, 1));
+ 			}
+ 
+-			//hack to fix SDF ship intro screen with split. is it right?
+-			//well, if we didnt do this, we'd be passing in a negative scanline, so that's a sign something is fishy..
+-			if(sl != 0)
+ 				if (MMC5Hack) MMC5_hb(yp);
+ 
+ 
+@@ -2207,7 +2807,7 @@
+ 							int addr = ppur.get_2007access();
+ 							if ((addr & 0x3F00) == 0x3F00)
+ 							{
+-								pixel = addr & 0x1F;
++								pixel = addr & 0xFF;
+ 							}
+ 							pixelcolor = PALRAM[pixel];
+ 						}
+@@ -2395,14 +2995,6 @@
+ 					}
+ 				}
+ 
+-				//blind attempt to replicate old ppu functionality
+-				if(s == 2 && PPUON)
+-				{
+-					if (GameHBIRQHook2) {
+-						GameHBIRQHook2();
+-					}
+-				}
+-
+ 				if (realSprite) runppu(kFetchTime);
+ 
+ 
+diff -ENwbur src/ppu.h src/ppu.h
+--- src/ppu.h	2018-06-20 11:40:06.841361200 +0500
++++ src/ppu.h	2018-06-20 11:02:19.410801100 +0500
+@@ -14,15 +14,18 @@
+ void newppu_hacky_emergency_reset();
+ 
+ /* For cart.c and banksw.h, mostly */
+-extern uint8 NTARAM[0x800], *vnapage[4];
++extern uint8 NTARAM[0x800];
++extern uint8 NTARAM2[0x800];
++extern uint8 *vnapage[4];
++extern uint8 *vnapage2[4];
+ extern uint8 PPUNTARAM;
+-extern uint8 PPUCHRRAM;
++extern int PPUCHRRAM;
++extern int vt03_mode;
+ 
+ void FCEUPPU_SaveState(void);
+ void FCEUPPU_LoadState(int version);
+ uint32 FCEUPPU_PeekAddress();
+ uint8* FCEUPPU_GetCHR(uint32 vadr, uint32 refreshaddr);
+-int FCEUPPU_GetAttr(int ntnum, int xt, int yt);
+ void ppu_getScroll(int &xpos, int &ypos);
+ 
+ 
+@@ -39,7 +42,7 @@
+ void FFCEUX_PPUWrite_Default(uint32 A, uint8 V);
+ 
+ extern int g_rasterpos;
+-extern uint8 PPU[4];
++extern int PPU[4];
+ extern bool DMC_7bit;
+ extern bool paldeemphswap;
+ 
+diff -ENwbur src/pputile.inc src/pputile.inc
+--- src/pputile.inc	2018-06-20 11:40:06.856984400 +0500
++++ src/pputile.inc	2018-06-20 11:01:41.295019400 +0500
+@@ -1,3 +1,30 @@
++	uint8 *S2 = PALRAM;
++	uint32 pixdata2;
++	uint32 lel2;
++
++uint8 *C2;
++register uint8 cc2;
++uint32 vadr2;
++
++#ifndef PPUT_MMC5SP
++	register uint8 zz2;
++#else
++	uint8 xs2, ys2;
++	xs2 = X1;
++	ys2 = ((scanline >> 3) + MMC5HackSPScroll) & 0x1F;
++	if (ys2 >= 0x1E) ys2 -= 0x1E;
++#endif
++//RefreshAddr2 &= RefreshAddr; 
++if (X1 >= 2) {
++
++
++	pixdata2 = ppulut1[(pshift2[0] >> (8 - XOffset2)) & 0xFF] | ppulut2[(pshift2[1] >> (8 - XOffset2)) & 0xFF];
++if(vt03_mode)pixdata2 = ppulut1[(pshift2[0] >> (8 - XOffset2)) & 0xFF] | ppulut2[(pshift2[1] >> (8 - XOffset2)) & 0xFF] | ppulut4[(pshift2[2] >> (8 - XOffset2)) & 0xFF] | ppulut5[(pshift2[3] >> (8 - XOffset2)) & 0xFF];
++lel2 = pixdata2;
++lel2 = ppulut3[XOffset2 | (atlatch2 << 3)];
++
++}
++
+ uint8 *C;
+ register uint8 cc;
+ uint32 vadr;
+@@ -14,11 +41,93 @@
+ if (X1 >= 2) {
+ 	uint8 *S = PALRAM;
+ 	uint32 pixdata;
++	uint32 lel;
+ 
+ 	pixdata = ppulut1[(pshift[0] >> (8 - XOffset)) & 0xFF] | ppulut2[(pshift[1] >> (8 - XOffset)) & 0xFF];
++if(vt03_mode)pixdata = ppulut1[(pshift[0] >> (8 - XOffset)) & 0xFF] | ppulut2[(pshift[1] >> (8 - XOffset)) & 0xFF] | ppulut4[(pshift[2] >> (8 - XOffset)) & 0xFF] | ppulut5[(pshift[3] >> (8 - XOffset)) & 0xFF];
++lel = pixdata;
++lel = ppulut3[XOffset | (atlatch << 3)];
+ 
+-	pixdata |= ppulut3[XOffset | (atlatch << 3)];
+ 
++if(vt03_mode&&pixdata)
++{
++//pixdata |= ppulut3[XOffset];
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[0] = S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[0] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	lel >>=4;	
++	pixdata2 >>= 4;
++	lel2 >>=4;	
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[1] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[1] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[2] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[2] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[3] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[3] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[4] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[4] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;	
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[5] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];else P[5] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;	
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[6] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];	else P[6] = S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;		
++	lel >>=4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!(S[pixdata & 0xF | (((lel>>2)&3)<<4)]&0x80 || !(S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)])&0x7F))P[7] =  S[pixdata & 0xF | (((lel>>2)&3)<<4)];	else P[7] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	}
++	else
++	{
++	if(vt03_mode)
++	{
++	//pixdata = 0;
++	if(!pixdata2)P[0] = S[0];else P[0] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[1] = S[0];else P[1] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[2] = S[0];else P[2] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[3] = S[0];else P[3] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[4] = S[0];else P[4] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[5] = S[0];else P[5] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[6] = S[0];else P[6] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	pixdata >>= 4;
++	pixdata2 >>= 4;
++	lel2 >>=4;
++	if(!pixdata2)P[7] = S[0];else P[7] =  S2[pixdata2 & 0xF | (((lel2>>2)&3)<<4)]| 0x80;
++	
++	}
++	else
++	{
++	pixdata |= ppulut3[XOffset | (atlatch << 3)];
+ 	P[0] = S[pixdata & 0xF];
+ 	pixdata >>= 4;
+ 	P[1] = S[pixdata & 0xF];
+@@ -34,15 +143,128 @@
+ 	P[6] = S[pixdata & 0xF];
+ 	pixdata >>= 4;
+ 	P[7] = S[pixdata & 0xF];
+-	P += 8;
++	
++	}
++
++}
++}
++if (X1 >= 2) P +=8;
++//if (X1 >= 2) {
++//	uint8 *S = PALRAM;
++//	uint32 pixdata;
++//
++//	pixdata = ppulut1[(pshift[0] >> (8 - XOffset)) & 0xFF] | ppulut2[(pshift[1] >> (8 - XOffset)) & 0xFF];
++//
++//	pixdata |= ppulut3[XOffset | (atlatch << 3)];
++//
++//	P[0] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[1] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[2] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[3] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[4] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[5] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[6] = S[pixdata & 0xF];
++//	pixdata >>= 4;
++//	P[7] = S[pixdata & 0xF];
++//	
++//}
++#ifdef PPUT_MMC5SP
++	vadr2 = (MMC5HackExNTARAMPtr[xs2 | (ys2 << 5)] << 4);
++#else
++	zz2 = RefreshAddr2 & 0x1F;
++	C2 = vnapage2[(RefreshAddr2 >> 10) & 3];
++	vadr2 = (C2[RefreshAddr2 & 0x3ff] << 4) + vofs2;	// Fetch name table byte.
++	if(vt03_mode)vadr2 = (C2[RefreshAddr2 & 0x3ff] << 5) + vofs2;	// Fetch name table byte.
++#endif
++
++#ifdef PPUT_HOOK
++	PPU_hook(0x2000 | (RefreshAddr2 & 0xfff));
++#endif
++
++#ifdef PPUT_MMC5SP
++	cc2 = MMC5HackExNTARAMPtr[0x3c0 + (xs2 >> 2) + ((ys2 & 0x1C) << 1)];
++	cc2 = ((cc2 >> ((xs2 & 2) + ((ys2 & 0x2) << 1))) & 3);
++#else
++	#ifdef PPUT_MMC5CHR1
++		cc2 = (MMC5HackExNTARAMPtr[RefreshAddr2 & 0x3ff] & 0xC0) >> 6;
++	#else
++		cc2 = C2[0x3c0 + (zz2 >> 2) + ((RefreshAddr2 & 0x380) >> 4)];	// Fetch attribute table byte.
++		cc2 = ((cc2 >> ((zz2 & 2) + ((RefreshAddr2 & 0x40) >> 4))) & 3);
++	#endif
++#endif
++
++atlatch2 >>= 2;
++atlatch2 |= cc2 << 2;
++
++pshift2[0] <<= 8;
++pshift2[1] <<= 8;
++pshift2[2] <<= 8;
++pshift2[3] <<= 8;
++
++#ifdef PPUT_MMC5SP
++	C2 = MMC5HackVROMPTR + vadr2;
++	C2 += ((MMC5HackSPPage & 0x3f & MMC5HackVROMMask) << 12);
++#else
++	#ifdef PPUT_MMC5CHR1
++		C2 = MMC5HackVROMPTR;
++		C2 += (((MMC5HackExNTARAMPtr[RefreshAddr2 & 0x3ff]) & 0x3f & MMC5HackVROMMask) << 12) + (vadr2 & 0xfff);
++		C2 += (MMC50x5130 & 0x3) << 18; //11-jun-2009 for kuja_killer
++	#elif defined(PPUT_MMC5)
++		C2 = MMC5BGVRAMADR(vadr2);
++	#else
++		//if(vadr2<0x4000)C2 = (uint8*)VRAMADR(vadr2);
++		C2 = &extra_ppu[vadr2+0x6000];
++	#endif
++#endif
++
++#ifdef PPUT_HOOK
++	PPU_hook(vadr2);
++#endif
++
++#ifdef PPU_BGFETCH
++	if (RefreshAddr2 & 1) {
++		if(ScreenON)
++			RENDER_LOG(vadr2 + 8);
++		pshift2[0] |= C2[8];
++		pshift2[1] |= C2[8];
++	//	pshift2[2] |= C2[16];
++	//	pshift2[3] |= C2[24];
++	} else {
++		if(ScreenON)
++			RENDER_LOG(vadr2);
++		pshift2[0] |= C2[0];
++		pshift2[1] |= C2[0];
++	//	pshift2[2] |= C2[16];
++	//	pshift2[3] |= C2[24];
+ }
++#else
++	if(ScreenON)
++		RENDER_LOG(vadr2);
++	pshift2[0] |= C2[0];
++	pshift2[2] |= C2[16];
++	if(ScreenON)
++		RENDER_LOG(vadr2 + 8);
++	pshift2[1] |= C2[8];
++	pshift2[3] |= C2[24];
++#endif
++
+ 
++//#ifdef PPUT_HOOK
++//	PPU_hook(0x2000 | (RefreshAddr2 & 0xfff));
++//#endif
+ #ifdef PPUT_MMC5SP
+ 	vadr = (MMC5HackExNTARAMPtr[xs | (ys << 5)] << 4) + (vofs & 7);
+ #else
+ 	zz = RefreshAddr & 0x1F;
+ 	C = vnapage[(RefreshAddr >> 10) & 3];
+ 	vadr = (C[RefreshAddr & 0x3ff] << 4) + vofs;	// Fetch name table byte.
++	if(vt03_mode)vadr = (C[RefreshAddr & 0x3ff] << 5) + vofs;	// Fetch name table byte.
+ #endif
+ 
+ #ifdef PPUT_HOOK
+@@ -66,6 +288,8 @@
+ 
+ pshift[0] <<= 8;
+ pshift[1] <<= 8;
++pshift[2] <<= 8;
++pshift[3] <<= 8;
+ 
+ #ifdef PPUT_MMC5SP
+ 	C = MMC5HackVROMPTR + vadr;
+@@ -78,7 +302,8 @@
+ 	#elif defined(PPUT_MMC5)
+ 		C = MMC5BGVRAMADR(vadr);
+ 	#else
+-		C = VRAMADR(vadr);
++		if(vadr<0x4000)C = (uint8*)VRAMADR(vadr);
++		else C = &extra_ppu[vadr];
+ 	#endif
+ #endif
+ 
+@@ -89,22 +314,28 @@
+ #ifdef PPU_BGFETCH
+ 	if (RefreshAddr & 1) {
+ 		if(ScreenON)
+-			RENDER_LOGP(C + 8);
++			RENDER_LOG(vadr + 8);
+ 		pshift[0] |= C[8];
+ 		pshift[1] |= C[8];
++	//	pshift[2] |= C[16];
++	//	pshift[3] |= C[24];
+ 	} else {
+ 		if(ScreenON)
+-			RENDER_LOGP(C);
++			RENDER_LOG(vadr);
+ 		pshift[0] |= C[0];
+ 		pshift[1] |= C[0];
++	//	pshift[2] |= C[16];
++	//	pshift[3] |= C[24];
+ 	}
+ #else
+ 	if(ScreenON)
+-		RENDER_LOGP(C);
++		RENDER_LOG(vadr);
+ 	pshift[0] |= C[0];
++	pshift[2] |= C[16];
+ 	if(ScreenON)
+-		RENDER_LOGP(C + 8);
++		RENDER_LOG(vadr + 8);
+ 	pshift[1] |= C[8];
++	pshift[3] |= C[24];
+ #endif
+ 
+ if ((RefreshAddr & 0x1f) == 0x1f)
+@@ -112,6 +343,11 @@
+ else
+ 	RefreshAddr++;
+ 
++if ((RefreshAddr2 & 0x1f) == 0x1f)
++	RefreshAddr2 ^= 0x41F;
++else
++	RefreshAddr2++;
++
+ #ifdef PPUT_HOOK
+ 	PPU_hook(0x2000 | (RefreshAddr & 0xfff));
+ #endif
+diff -ENwbur src/sound.cpp src/sound.cpp
+--- src/sound.cpp	2018-06-20 11:40:06.872611400 +0500
++++ src/sound.cpp	2018-06-20 11:01:26.264030100 +0500
+@@ -330,8 +330,9 @@
+ 		DoPCM();
+ 		InitialRawDALatch=V&0x7F;
+ 		RawDALatch=InitialRawDALatch;
+-		if (RawDALatch)
+-			DMC_7bit = 1;
++		if (RawDALatch) {
++			DMC_7bit = 1; totalscanlines = 240;
++		}
+ 		break;
+ 	case 0x02:
+ 		DMCAddressLatch=V;
+diff -ENwbur src/state.cpp src/state.cpp
+--- src/state.cpp	2018-06-20 11:40:06.903912300 +0500
++++ src/state.cpp	2018-06-20 11:01:15.557561300 +0500
+@@ -110,7 +110,7 @@
+ 	{ &X.S, 1, "S\0\0"},
+ 	{ &X.P, 1, "P\0\0"},
+ 	{ &X.DB, 1, "DB"},
+-	{ &RAM, 0x800 | FCEUSTATE_INDIRECT, "RAM", },
++	{ &RAM, 0x8000 | FCEUSTATE_INDIRECT, "RAM", },
+ 	{ 0 }
+ };
+ 
+@@ -372,7 +372,7 @@
+ 
+ 	EMUFILE* os = &memory_savestate;
+ 
+-	uint32 totalsize = 0;
++	uint64 totalsize = 0;
+ 
+ 	FCEUPPU_SaveState();
+ 	FCEUSND_SaveState();
+@@ -974,12 +974,8 @@
+ 		loadStateFailed = 1;
+ 		return; // state doesn't exist; exit cleanly
+ 	}
+-
+ 	if (FCEUSS_Load(fname, display_message))
+ 	{
+-		//in case we're loading a savestate made with old ppu, we need to make sure ppur's regs used for dividing are ready to go
+-		newppu_hacky_emergency_reset();
+-
+ 		//mbg todo netplay
+ #if 0 
+ 		if(FCEUnetplay)
+diff -ENwbur src/x6502.cpp src/x6502.cpp
+--- src/x6502.cpp	2018-06-20 11:40:07.075745400 +0500
++++ src/x6502.cpp	2018-06-20 11:09:45.616790600 +0500
+@@ -37,11 +37,13 @@
+ 
+ #define ADDCYC(x) \
+ {                 \
+- int __x=x;       \
++	if(!abcde){     \
++ double __x=x;       \
+  _tcount+=__x;    \
+  _count-=__x*48;  \
+  timestamp+=__x;  \
+  if(!overclocking) soundtimestamp+=__x; \
++	}\
+ }
+ 
+ //normal memory read
+@@ -82,7 +84,8 @@
+ 
+ void X6502_DMW(uint32 A, uint8 V)
+ {
+- ADDCYC(1);
++	if (nes128 == 1)ADDCYC(-0.5);
++	if (nes128 == 0)ADDCYC(1);
+  BWrite[A](A,V);
+  #ifdef _S9XLUA_H
+  CallRegisteredLuaMemHook(A, 1, V, LUAMEMHOOK_WRITE);
+@@ -122,11 +125,13 @@
+  else _PC++;  \
+ }
+ 
++#define DMA   _A = _A*x;X_ZN(_A)
++#define DVA   _A = _A/x;X_ZN(_A)
+ 
+ #define LDA     _A=x;X_ZN(_A)
+ #define LDX     _X=x;X_ZN(_X)
+ #define LDY  _Y=x;X_ZN(_Y)
+-
++#define LDZ  _Z=x;X_ZN(_Z)
+ /*  All of the freaky arithmetic operations. */
+ #define AND  _A&=x;X_ZN(_A)
+ #define BIT  _P&=~(Z_FLAG|V_FLAG|N_FLAG);_P|=ZNTable[x&_A]&Z_FLAG;_P|=x&(V_FLAG|N_FLAG)
+@@ -309,33 +314,39 @@
+ #define RMW_ABI(reg,op) {unsigned int A; uint8 x; GetABIWR(A,reg); x=RdMem(A); WrMem(A,x); op; WrMem(A,x); break; }
+ #define RMW_ABX(op)  RMW_ABI(_X,op)
+ #define RMW_ABY(op)  RMW_ABI(_Y,op)
++#define RMW_ABZ(op)  RMW_ABI(_Z,op)
+ #define RMW_IX(op)  {unsigned int A; uint8 x; GetIX(A); x=RdMem(A); WrMem(A,x); op; WrMem(A,x); break; }
+ #define RMW_IY(op)  {unsigned int A; uint8 x; GetIYWR(A); x=RdMem(A); WrMem(A,x); op; WrMem(A,x); break; }
+ #define RMW_ZP(op)  {uint8 A; uint8 x; GetZP(A); x=RdRAM(A); op; WrRAM(A,x); break; }
+ #define RMW_ZPX(op) {uint8 A; uint8 x; GetZPI(A,_X); x=RdRAM(A); op; WrRAM(A,x); break;}
+ 
++
+ #define LD_IM(op)  {uint8 x; x=RdMem(_PC); _PC++; op; break;}
+ #define LD_ZP(op)  {uint8 A; uint8 x; GetZP(A); x=RdRAM(A); op; break;}
+ #define LD_ZPX(op)  {uint8 A; uint8 x; GetZPI(A,_X); x=RdRAM(A); op; break;}
+ #define LD_ZPY(op)  {uint8 A; uint8 x; GetZPI(A,_Y); x=RdRAM(A); op; break;}
++#define LD_ZPZ(op)  {uint8 A; uint8 x; GetZPI(A,_Z); x=RdRAM(A); op; break;}
+ #define LD_AB(op)  {unsigned int A; uint8 x; GetAB(A); x=RdMem(A); op; break; }
+ #define LD_ABI(reg,op)  {unsigned int A; uint8 x; GetABIRD(A,reg); x=RdMem(A); op; break;}
+ #define LD_ABX(op)  LD_ABI(_X,op)
+ #define LD_ABY(op)  LD_ABI(_Y,op)
++#define LD_ABZ(op)  LD_ABI(_Z,op)
+ #define LD_IX(op)  {unsigned int A; uint8 x; GetIX(A); x=RdMem(A); op; break;}
+ #define LD_IY(op)  {unsigned int A; uint8 x; GetIYRD(A); x=RdMem(A); op; break;}
+ 
+ #define ST_ZP(r)  {uint8 A; GetZP(A); WrRAM(A,r); break;}
+ #define ST_ZPX(r)  {uint8 A; GetZPI(A,_X); WrRAM(A,r); break;}
+ #define ST_ZPY(r)  {uint8 A; GetZPI(A,_Y); WrRAM(A,r); break;}
++#define ST_ZPZ(r)  {uint8 A; GetZPI(A,_Z); WrRAM(A,r); break;}
+ #define ST_AB(r)  {unsigned int A; GetAB(A); WrMem(A,r); break;}
+ #define ST_ABI(reg,r)  {unsigned int A; GetABIWR(A,reg); WrMem(A,r); break; }
+ #define ST_ABX(r)  ST_ABI(_X,r)
+ #define ST_ABY(r)  ST_ABI(_Y,r)
++#define ST_ABZ(r)  ST_ABI(_Z,r)
+ #define ST_IX(r)  {unsigned int A; GetIX(A); WrMem(A,r); break; }
+ #define ST_IY(r)  {unsigned int A; GetIYWR(A); WrMem(A,r); break; }
+ 
+-static uint8 CycTable[256] =
++static uint8 CycTable2[256] =
+ {
+ /*0x00*/ 7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
+ /*0x10*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+@@ -349,12 +360,32 @@
+ /*0x90*/ 2,6,2,6,4,4,4,4,2,5,2,5,5,5,5,5,
+ /*0xA0*/ 2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
+ /*0xB0*/ 2,5,2,5,4,4,4,4,2,4,2,4,4,4,4,4,
+-/*0xC0*/ 2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,
++/*0xC0*/ 2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,0,
+ /*0xD0*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+-/*0xE0*/ 2,6,3,8,3,3,5,5,2,2,2,2,4,4,6,6,
++/*0xE0*/ 2,6,3,8,3,3,5,5,2,2,2,2,4,4,6,0,
+ /*0xF0*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+ };
+ 
++static uint8 CycTable[256] =
++{
++/*0x00*/ 7,6,0,8,3,3,5,5,3,2,2,2,4,4,6,6,
++/*0x10*/ 2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,
++/*0x20*/ 6,6,0,8,3,3,5,5,4,2,2,2,4,4,6,6,
++/*0x30*/ 2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,
++/*0x40*/ 6,6,0,8,3,3,5,5,3,2,2,2,3,4,6,6,
++/*0x50*/ 2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
++/*0x60*/ 6,6,2,8,3,3,5,5,4,2,2,2,5,4,6,6,
++/*0x70*/ 2,5,2,8,4,4,6,6,2,4,0,7,4,4,7,7,
++/*0x80*/ 0,6,0,0,3,3,3,0,2,0,2,0,4,4,4,0,
++/*0x90*/ 2,6,0,0,4,4,4,0,2,5,2,0,0,5,0,5,
++/*0xA0*/ 2,6,2,0,3,3,3,0,2,2,2,0,4,4,4,0,
++/*0xB0*/ 2,5,0,0,4,4,4,0,2,4,2,0,4,4,4,0,
++/*0xC0*/ 2,6,2,0,3,3,5,5,2,2,2,2,4,4,6,6,
++/*0xD0*/ 2,5,2,0,4,4,6,6,2,4,2,0,4,4,7,0,
++/*0xE0*/ 2,6,3,8,3,3,5,5,2,2,2,2,4,4,6,6,
++/*0xF0*/ 2,5,0,0,4,4,6,6,2,4,2,7,4,4,7,7,
++};
++
+ void X6502_IRQBegin(int w)
+ {
+  _IRQlow|=w;
+@@ -409,7 +440,7 @@
+ extern int StackAddrBackup;
+ void X6502_Power(void)
+ {
+- _count=_tcount=_IRQlow=_PC=_A=_X=_Y=_P=_PI=_DB=_jammed=0;
++ _count=_tcount=_IRQlow=_PC=_A=_X=_Y=_P=_PI=_DB=_Z=_jammed=0;
+  _S=0xFD;
+  timestamp=soundtimestamp=0;
+  X6502_Reset();
+@@ -543,22 +574,22 @@
+ #else
+ /*0x00*/	1, //BRK
+ #endif
+-/*0x01*/      2,0,0,0,2,2,0,1,2,1,0,0,3,3,0,
+-/*0x10*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0,
+-/*0x20*/	3,2,0,0,2,2,2,0,1,2,1,0,3,3,3,0,
+-/*0x30*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0,
+-/*0x40*/	1,2,0,0,0,2,2,0,1,2,1,0,3,3,3,0,
+-/*0x50*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0,
++/*0x01*/      2,1,0,0,2,2,0,1,2,1,0,0,3,3,0,
++/*0x10*/	2,2,1,0,0,2,2,0,1,3,0,0,0,3,3,0,
++/*0x20*/	3,2,3,0,2,2,2,0,1,2,1,0,3,3,3,0,
++/*0x30*/	2,2,3,0,0,2,2,0,1,3,0,0,0,3,3,0,
++/*0x40*/	1,2,2,0,0,2,2,0,1,2,1,0,3,3,3,0,
++/*0x50*/	2,2,3,0,0,2,2,0,1,3,0,0,0,3,3,0,
+ /*0x60*/	1,2,0,0,0,2,2,0,1,2,1,0,3,3,3,0,
+-/*0x70*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0,
+-/*0x80*/	0,2,0,0,2,2,2,0,1,0,1,0,3,3,3,0,
+-/*0x90*/	2,2,0,0,2,2,2,0,1,3,1,0,0,3,0,0,
+-/*0xA0*/	2,2,2,0,2,2,2,0,1,2,1,0,3,3,3,0,
+-/*0xB0*/	2,2,0,0,2,2,2,0,1,3,1,0,3,3,3,0,
+-/*0xC0*/	2,2,0,0,2,2,2,0,1,2,1,0,3,3,3,0,
+-/*0xD0*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0,
+-/*0xE0*/	2,2,0,0,2,2,2,0,1,2,1,0,3,3,3,0,
+-/*0xF0*/	2,2,0,0,0,2,2,0,1,3,0,0,0,3,3,0
++/*0x70*/	2,2,0,0,0,2,2,0,1,3,1,0,0,3,3,0,
++/*0x80*/	1,2,2,2,2,2,2,2,1,2,1,2,3,3,3,2,
++/*0x90*/	2,2,3,3,2,2,2,3,1,3,1,3,3,3,3,0,
++/*0xA0*/	2,2,2,2,2,2,2,2,1,2,1,2,3,3,3,2,
++/*0xB0*/	2,2,3,3,2,2,2,2,1,3,1,3,3,3,3,2,
++/*0xC0*/	2,2,0,3,2,2,2,0,1,2,1,0,3,3,3,3,
++/*0xD0*/	2,2,0,3,0,2,2,0,1,3,0,3,0,3,3,3,
++/*0xE0*/	2,2,0,0,2,2,2,0,1,2,1,0,3,3,3,3,
++/*0xF0*/	2,2,2,2,0,2,2,0,1,3,0,0,0,3,3,0
+ };
+ 
+ 
+@@ -573,24 +604,26 @@
+ //  6 = Absolute,Y
+ //  7 = Absolute,X
+ //  8 = Zero Page,Y
++//  9 = Absolute,Z
++//  10 = Zero Page,Z
+ //
+ const uint8 optype[256] = {
+ /*0x00*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+ /*0x10*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
+-/*0x20*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0x30*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
+-/*0x40*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0x50*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
++/*0x20*/	0,1,3,1,2,2,2,2,0,0,0,0,3,3,3,3,
++/*0x30*/	0,4,9,3,5,5,5,5,0,6,0,6,7,7,7,7,
++/*0x40*/	0,1,10,1,2,2,2,2,0,0,0,0,3,3,3,3,
++/*0x50*/	0,4,9,3,5,5,5,5,0,6,0,6,7,7,7,7,
+ /*0x60*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+ /*0x70*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
+-/*0x80*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0x90*/	0,4,0,3,5,5,8,8,0,6,0,6,7,7,6,6,
+-/*0xA0*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0xB0*/	0,4,0,3,5,5,8,8,0,6,0,6,7,7,6,6,
+-/*0xC0*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0xD0*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
+-/*0xE0*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,3,
+-/*0xF0*/	0,4,0,3,5,5,5,5,0,6,0,6,7,7,7,7,
++/*0x80*/	0,1,2,5,2,2,2,10,0,10,0,10,3,3,3,8,
++/*0x90*/	0,4,3,7,5,5,8,6,0,6,0,9,9,7,9,6,
++/*0xA0*/	0,1,0,0,2,2,2,2,0,0,0,5,3,3,3,8,
++/*0xB0*/	0,4,7,6,5,5,8,10,0,6,0,9,7,7,6,10,
++/*0xC0*/	0,1,0,9,2,2,2,2,0,0,0,0,3,3,3,9,
++/*0xD0*/	0,4,0,9,5,5,5,5,0,6,0,9,7,7,7,9,
++/*0xE0*/	0,1,0,1,2,2,2,2,0,0,0,0,3,3,3,9,
++/*0xF0*/	0,4,0,0,5,5,5,5,0,6,0,6,7,7,7,7,
+ };
+ 
+ // the opwrite table aids in predicting the value written for any 6502 opcode
+@@ -611,6 +644,7 @@
+ // 13 = (SHY)
+ // 14 = (SHX)
+ // 15 = (TAS)
++// 16 = Write from Z
+ 
+ const uint8 opwrite[256] = {
+ /*0x00*/	 0, 0, 0, 5, 0, 0, 5, 5, 4, 0, 0, 0, 0, 0, 5, 5,
+@@ -621,12 +655,12 @@
+ /*0x50*/	 0, 0, 0, 6, 0, 0, 6, 6, 0, 0, 0, 6, 0, 0, 6, 6,
+ /*0x60*/	 0, 0, 0, 8, 0, 0, 8, 8, 0, 0, 8, 0, 0, 0, 8, 8,
+ /*0x70*/	 0, 0, 0, 8, 0, 0, 8, 8, 0, 0, 0, 8, 0, 0, 8, 8,
+-/*0x80*/	 0, 1, 0,11, 3, 1, 2,11, 0, 0, 0, 0, 3, 1, 2,11,
+-/*0x90*/	 0, 1, 0,12, 3, 1, 2,11, 0, 1, 0,15,13, 1,14,12,
++/*0x80*/	 16, 1, 16,16, 3, 1, 2,1, 0, 1, 0, 3, 3, 1, 2,16,
++/*0x90*/	 0, 1, 16,16, 3, 1, 2,16, 0, 1, 0,1,1, 1,3,12,
+ /*0xA0*/	 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+ /*0xB0*/	 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+-/*0xC0*/	 0, 0, 0,10, 0, 0,10,10, 0, 0, 0, 0, 0, 0,10,10,
+-/*0xD0*/	 0, 0, 0,10, 0, 0,10,10, 0, 0, 0,10, 0, 0,10,10,
+-/*0xE0*/	 0, 0, 0, 9, 0, 0, 9, 9, 0, 0, 0, 0, 0, 0, 9, 9,
++/*0xC0*/	 0, 0, 0,16, 0, 0,10,10, 0, 0, 0, 0, 0, 0,10,16,
++/*0xD0*/	 0, 0, 0,16, 0, 0,10,10, 0, 0, 0,16, 0, 0,10,16,
++/*0xE0*/	 0, 0, 0, 9, 0, 0, 9, 9, 0, 0, 0, 0, 0, 0, 9,16,
+ /*0xF0*/	 0, 0, 0, 9, 0, 0, 9, 9, 0, 0, 0, 9, 0, 0, 9, 9,
+ };
+\ No newline at end of file
+diff -ENwbur src/x6502.h src/x6502.h
+--- src/x6502.h	2018-06-20 11:40:07.075745400 +0500
++++ src/x6502.h	2018-06-20 10:56:19.508179600 +0500
+@@ -52,6 +52,7 @@
+ extern uint32 timestamp;
+ extern uint32 soundtimestamp;
+ extern int scanline;
++extern int abcde;
+ 
+ #define N_FLAG  0x80
+ #define V_FLAG  0x40
+diff -ENwbur src/x6502abbrev.h src/x6502abbrev.h
+--- src/x6502abbrev.h	2018-06-20 11:40:07.091379200 +0500
++++ src/x6502abbrev.h	2018-06-20 10:55:59.813353300 +0500
+@@ -6,6 +6,7 @@
+ #define _PC        X.PC
+ #define _A         X.A
+ #define _X         X.X
++#define _Z         X.Z
+ #define _Y         X.Y
+ #define _S         X.S
+ #define _P         X.P
+diff -ENwbur src/x6502struct.h src/x6502struct.h
+--- src/x6502struct.h	2018-06-20 11:40:07.107036400 +0500
++++ src/x6502struct.h	2018-06-20 10:55:42.265106600 +0500
+@@ -6,7 +6,7 @@
+   uint16 PC;        /* I'll change this to uint32 later... */
+                                 /* I'll need to AND PC after increments to 0xFFFF */
+                                 /* when I do, though.  Perhaps an IPC() macro? */
+-        uint8 A,X,Y,S,P,mooPI;
++        uint8 A,X,Y,S,P,mooPI,Z;
+         uint8 jammed;
+ 
+ 	int32 count;
