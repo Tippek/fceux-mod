@@ -1,5 +1,5 @@
 # fceux-mod
-Changes from fceux 2.2.3:
+Changes from fceux 2.2.3:(based on https://github.com/TASVideos/fceux)
 
 - RAM: 0x0000-0x7FFF;
 - 16 palettes for sprites and 4 for background(0x3f20 not mirrored, unused bits in sprite attribute)
